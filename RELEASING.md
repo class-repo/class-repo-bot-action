@@ -10,7 +10,7 @@ Educators run this code with their own keys, so a release is a security event. T
    other changes of that kind. Those are the releases educators must act on by hand.
 4. If the job format changed, update `server/src/protocol.js` and `docs/PROTOCOL.md` in `class-repo-site`, regenerate the shared example
    (`WRITE_JOB_EXAMPLE=1 npx vitest run test/job-example.test.js` in `server/`), and copy `server/test/fixtures/job-example.json` to
-   `test/job-example.json` here. A new **major** protocol: keep serving the previous one for a while.
+   `test/job-example.json` here. While ClassRepo is in alpha a protocol change simply requires educators to update; the server keeps no older formats.
 5. Open a pull request, have someone else read it, merge. (Recommended repository settings: protect `main`, require a review, require signed commits.)
 
 ## Tagging
