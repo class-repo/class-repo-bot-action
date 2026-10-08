@@ -24,14 +24,19 @@ const childProcess = require('child_process');
 const { generateRosterKeyPair, openSealed } = require('./roster-crypto');
 const { version: BOT_VERSION } = require('../package.json');
 
-// Job format version. A newer server keeps sending protocol 2 jobs to bots that list 2, so bots can lag safely.
-const PROTOCOL = 2;
+// Job format version. The server sends a job only to a bot that lists its protocol.
+const PROTOCOL = 3;
 const COPY_WAIT_ATTEMPTS = 30; // GitHub usually takes a few seconds; give up after about a minute
 const COPY_WAIT_MS = 2000;
 const MAX_REPOS = 200;
 const MAX_COLLABORATORS = 10;
 const ALLOWED_PERMISSIONS = ['pull', 'push'];
-const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'archived'];
+const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'archived', 'instructions_url'];
+const SUPPORTED_SNAPSHOT_FIELDS = ['protocol', 'mode', 'template', 'assignment_name', 'target_owner', 'shortcode'];
+const SNAPSHOT_TOPIC = 'classrepo-snapshot';
+const SNAPSHOT_RE = /^classrepo-snapshot-[A-Za-z0-9]{1,32}$/;
+// https only, and none of the characters that could break out of a Markdown link or an HTML attribute.
+const INSTRUCTIONS_RE = /^https:\/\/[A-Za-z0-9._~:/?#@!$&*+,;=%-]{1,300}$/;
 const SUPPORTED_REPO_FIELDS = ['sync_key', 'collaborators', 'settings'];
 const MARKER_TOPIC = 'classrepo';
 
@@ -40,7 +45,7 @@ const BOT = {
   version: BOT_VERSION,
   protocols: [PROTOCOL],
   capabilities: [
-    'ensure_repos', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
+    'ensure_repos', 'snapshot', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
     ...SUPPORTED_SETTINGS.map(k => `setting:${k}`), 'marker:topic',
   ],
 };
@@ -86,6 +91,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
 
   if (job.mode === 'setup_keys') return setupKeys();
   if (job.mode === 'ensure_repos') return ensureRepos();
+  if (job.mode === 'snapshot') return snapshot();
   await reportAll(OUTDATED);
   return core.setFailed('This job type is not supported by this version of the bot. Update the bot.');
 
@@ -116,7 +122,8 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       if (people.some(p => !p || typeof p.sealed !== 'string' || !ALLOWED_PERMISSIONS.includes(p.permission))) {
         return { message: `The job asks for a permission this bot never grants (it grants only: ${ALLOWED_PERMISSIONS.join(', ')}).`, student: 'This could not be done.' };
       }
-      if (Object.values(spec.settings || {}).some(v => typeof v !== 'boolean')) return { message: 'A repository setting is not true or false.', student: 'This could not be done.' };
+      const settingsOk = Object.entries(spec.settings || {}).every(([k, v]) => (k === 'instructions_url' ? typeof v === 'string' && INSTRUCTIONS_RE.test(v) : typeof v === 'boolean'));
+      if (!settingsOk) return { message: 'A repository setting has an invalid value.', student: 'This could not be done.' };
     }
     return null;
   }
@@ -143,6 +150,83 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     core.info('Encrypted roster enabled.');
   }
 
+  // GitHub copies a template in the background: the repository exists straight away but is empty for a few seconds.
+  // Inviting people or writing files into it before the copy finishes can collide with the copy, so wait for the files.
+  async function waitForTemplateCopy(owner, repoName) {
+    for (let attempt = 0; attempt < COPY_WAIT_ATTEMPTS; attempt++) {
+      try {
+        const root = await github.rest.repos.getContent({ owner, repo: repoName, path: '' });
+        if (Array.isArray(root.data) && root.data.length > 0) return;
+      } catch { /* not there yet */ }
+      await sleep(COPY_WAIT_MS);
+    }
+    throw new Error('GitHub is still copying the template into the repository. Please try again in a minute.');
+  }
+
+  // Labels a repository as ClassRepo's. Best effort: a repository generated from this template is recognised anyway.
+  async function markTopics(owner, repoName, names) {
+    try {
+      await github.rest.repos.replaceAllTopics({ owner, repo: repoName, names: [...new Set(names)] });
+    } catch {
+      core.warning('Could not label one repository as created by ClassRepo.');
+    }
+  }
+
+  // Tells the server the one result of a job that is not about students (a snapshot).
+  async function reportOne(status, error) {
+    try { await call('results', { results: [{ index: 0, status, error }] }); } catch { core.warning('Could not send a status report to the server.'); }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // snapshot: make the frozen copy of an assignment's starter that every student's repository is generated from.
+  // It lives in the educator's own account, is private, and carries a topic so this bot (and only this bot) can tell it
+  // is one of ClassRepo's. This is the one repository the bot ever marks as a template.
+  // ---------------------------------------------------------------------------------------------
+  async function snapshot() {
+    const { template, assignment_name: name } = job;
+    const owner = job.target_owner || context.repo.owner;
+    const stop = async (message, log) => { await reportOne('failed', message); core.setFailed(log || message); };
+
+    if (!TEMPLATE_RE.test(template || '') || !SNAPSHOT_RE.test(name || '') || !HANDLE_RE.test(owner) || Object.keys(job).some(k => !SUPPORTED_SNAPSHOT_FIELDS.includes(k))) {
+      return stop('The job contains invalid names.');
+    }
+    const allowedOwners = String(env.ALLOWED_TEMPLATE_OWNERS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+    if (allowedOwners.length && !allowedOwners.includes(template.split('/')[0].toLowerCase())) {
+      return stop('The template owner is not in the allowed list of your bot repository.', 'The template owner is not in this repository\'s allowed list (CLASSREPO_ALLOWED_TEMPLATE_OWNERS).');
+    }
+    const [templateOwner, templateRepo] = template.split('/');
+
+    let existing = null;
+    try {
+      existing = (await github.rest.repos.get({ owner, repo: name })).data;
+    } catch (e) {
+      if (e.status !== 404) return stop(`Could not check for an existing copy (HTTP ${e.status || 'error'}).`);
+    }
+    if (existing && !(existing.topics || []).includes(SNAPSHOT_TOPIC)) {
+      return stop('A repository with the snapshot name already exists and was not made by ClassRepo, so it was left alone.');
+    }
+    if (!existing) {
+      try {
+        await github.rest.repos.createUsingTemplate({ template_owner: templateOwner, template_repo: templateRepo, owner, name, private: true, include_all_branches: false });
+      } catch (e) {
+        return stop(`Could not copy the template (HTTP ${e.status || 'error'}). Check that your Executor App can read it.`);
+      }
+    }
+    try {
+      await waitForTemplateCopy(owner, name);
+    } catch (e) {
+      return stop(e.message);
+    }
+    await markTopics(owner, name, [MARKER_TOPIC, SNAPSHOT_TOPIC]);
+    try {
+      await github.rest.repos.update({ owner, repo: name, is_template: true });
+    } catch (e) {
+      return stop(`Could not make the copy a template (HTTP ${e.status || 'error'}).`);
+    }
+    core.info('snapshot: done');
+    await reportOne('ready');
+  }
+
   // ---------------------------------------------------------------------------------------------
   // ensure_repos: make these repositories look like the job says. Creates what is missing and corrects what differs,
   // so running the same job twice is harmless.
@@ -160,11 +244,22 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       return core.setFailed(refusal.message);
     }
     if (!NAME_RE.test(assignment || '') || !TEMPLATE_RE.test(template || '') || !HANDLE_RE.test(owner) || !NAME_RE.test(trackingRepo)) {
+      await reportAll('This could not be done.');
       return core.setFailed('The job contains invalid names.');
     }
-    const allowedOwners = String(env.ALLOWED_TEMPLATE_OWNERS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    if (allowedOwners.length && !allowedOwners.includes(template.split('/')[0].toLowerCase())) {
-      return core.setFailed('The template owner is not in this repository\'s allowed list (CLASSREPO_ALLOWED_TEMPLATE_OWNERS).');
+    // Students' repositories are only ever generated from a snapshot THIS bot made in the educator's own account, never from
+    // whatever repository a job names. (The educator's allowed-template-owners list applies to the snapshot's source instead.)
+    const [snapshotOwner, snapshotRepo] = template.split('/');
+    if (snapshotOwner.toLowerCase() !== owner.toLowerCase() || !SNAPSHOT_RE.test(snapshotRepo)) {
+      await reportAll('The assignment is not set up correctly. Please let your instructor know.');
+      return core.setFailed('The job names a template that is not one of ClassRepo\'s snapshots in the target account.');
+    }
+    try {
+      const copy = (await github.rest.repos.get({ owner: snapshotOwner, repo: snapshotRepo })).data;
+      if (!(copy.topics || []).includes(SNAPSHOT_TOPIC)) throw new Error('not a snapshot');
+    } catch {
+      await reportAll('The assignment is not ready yet. Please let your instructor know.');
+      return core.setFailed('The snapshot does not exist or is not labelled as ClassRepo\'s.');
     }
     if (!env.ROSTER_PRIVATE_KEY) return core.setFailed('No roster key is configured. Use "Turn on the encrypted roster" in the ClassRepo dashboard.');
 
@@ -200,27 +295,8 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       return { record, permission: collaborator.permission };
     }
 
-    // Labels a repository as ClassRepo's. Best effort: a repository generated from this template is recognised anyway.
-    async function mark(repoName, existingTopics = []) {
-      try {
-        await github.rest.repos.replaceAllTopics({ owner, repo: repoName, names: [...new Set([...existingTopics, MARKER_TOPIC])] });
-      } catch {
-        core.warning('Could not label one repository as created by ClassRepo.');
-      }
-    }
-
-    // GitHub copies a template in the background: the repository exists straight away but is empty for a few seconds.
-    // Inviting people or writing files into it before the copy finishes can collide with the copy, so wait for the files.
-    async function waitForTemplateCopy(repoName) {
-      for (let attempt = 0; attempt < COPY_WAIT_ATTEMPTS; attempt++) {
-        try {
-          const root = await github.rest.repos.getContent({ owner, repo: repoName, path: '' });
-          if (Array.isArray(root.data) && root.data.length > 0) return;
-        } catch { /* not there yet */ }
-        await sleep(COPY_WAIT_MS);
-      }
-      throw new Error('GitHub is still copying the template into the repository. Please try again in a minute.');
-    }
+    const mark = (repoName, existingTopics = []) => markTopics(owner, repoName, [...existingTopics, MARKER_TOPIC]);
+    const waitForCopy = repoName => waitForTemplateCopy(owner, repoName);
 
     // Throws an Error with a short message that is safe to show to the student and to log.
     async function ensureRepo(spec, people) {
@@ -240,7 +316,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
         } catch (e) {
           throw new Error(`Could not create the repository from the template (HTTP ${e.status || 'error'}).`);
         }
-        await waitForTemplateCopy(repoName);
+        await waitForCopy(repoName);
         await mark(repoName);
         existing = { archived: false };
       } else {
@@ -251,7 +327,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
         if (!topics.includes(MARKER_TOPIC) && !generatedFromTemplate) {
           throw new Error('A repository with that name already exists and was not created by ClassRepo, so it was left alone.');
         }
-        await waitForTemplateCopy(repoName); // a retry may find a repository GitHub has not finished filling
+        await waitForCopy(repoName); // a retry may find a repository GitHub has not finished filling
         if (!topics.includes(MARKER_TOPIC)) await mark(repoName, topics);
       }
 
@@ -269,7 +345,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
         }
       }
       if (settings.actions_enabled !== undefined) await setActions(repoName, settings.actions_enabled); // best effort
-      if (settings.codespaces_badge === true) await addCodespacesBadge(repoName); // best effort
+      await addReadmeNotes(repoName, { instructionsUrl: settings.instructions_url, badge: settings.codespaces_badge === true }); // best effort
       writeRoster(people, repoName);
       if (settings.archived === true) {
         try { await github.rest.repos.update({ owner, repo: repoName, archived: true }); } catch (e) { throw new Error(`Could not archive the repository (HTTP ${e.status || 'error'}).`); }
@@ -294,19 +370,21 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       }
     }
 
-    async function addCodespacesBadge(repoName) {
-      const badge = `[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/${owner}/${repoName}?quickstart=1)`;
+    // Puts the instructions link and the Codespaces badge at the top of the README, once each (so re-running is harmless).
+    async function addReadmeNotes(repoName, { instructionsUrl, badge }) {
+      const notes = [];
+      if (instructionsUrl) notes.push({ key: instructionsUrl, text: `**[Assignment instructions](${instructionsUrl})**` });
+      if (badge) notes.push({ key: 'codespaces.new', text: `[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/${owner}/${repoName}?quickstart=1)` });
+      if (notes.length === 0) return;
       try {
         const readme = await github.rest.repos.getContent({ owner, repo: repoName, path: 'README.md' }).catch(() => null);
-        if (readme && readme.data) {
-          const current = Buffer.from(readme.data.content, 'base64').toString('utf8');
-          if (current.includes('codespaces.new')) return;
-          await github.rest.repos.createOrUpdateFileContents({ owner, repo: repoName, path: 'README.md', message: 'Add Codespaces badge', content: Buffer.from(`${badge}\n\n${current}`).toString('base64'), sha: readme.data.sha });
-        } else {
-          await github.rest.repos.createOrUpdateFileContents({ owner, repo: repoName, path: 'README.md', message: 'Add Codespaces badge', content: Buffer.from(`${badge}\n`).toString('base64') });
-        }
+        const current = readme && readme.data ? Buffer.from(readme.data.content, 'base64').toString('utf8') : '';
+        const missing = notes.filter(n => !current.includes(n.key));
+        if (missing.length === 0) return;
+        const content = Buffer.from(`${missing.map(n => n.text).join('\n\n')}\n\n${current}`.trimEnd() + '\n').toString('base64');
+        await github.rest.repos.createOrUpdateFileContents({ owner, repo: repoName, path: 'README.md', message: 'Add assignment links', content, ...(readme && readme.data ? { sha: readme.data.sha } : {}) });
       } catch {
-        core.warning('Could not add the Codespaces badge to one repository.');
+        core.warning('Could not add the assignment links to one repository.');
       }
     }
 

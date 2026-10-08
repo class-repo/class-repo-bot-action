@@ -6,7 +6,7 @@ repository (made from the [`class-repo-bot`](https://github.com/class-repo/class
 *uses this action, pinned to an exact commit*, and GitHub proposes updates to you as pull requests.
 
 ```yaml
-- uses: class-repo/class-repo-bot-action@<exact commit>   # v2.0.0
+- uses: class-repo/class-repo-bot-action@<exact commit>   # v3.0.0
   with:
     batch-id: ${{ inputs.batch_id }}
     server-url: ${{ inputs.server_url }}
@@ -22,10 +22,13 @@ The complete workflow is [`examples/provision.yml`](./examples/provision.yml).
 The ClassRepo server decides *when* a job runs and *which* students it is for. This bot decides what is **allowed**, because it holds your
 Executor App's key. It enforces these rules whatever the server asks:
 
-* Repositories are only ever created **private**, from the template named in the job (and only from owners in your allow-list, if you set one).
+* Repositories are only ever created **private**.
+* Students' repositories are generated only from a **snapshot** this bot made in your own account (`classrepo-snapshot-<code>`, labelled `classrepo-snapshot`),
+  never from whatever repository a job names. The snapshot is a frozen private copy of your starter, made once per assignment; it is the one repository
+  the bot ever marks as a template. Your allow-list of template owners, if you set one, applies to what the snapshot is copied *from*.
 * Students get **at most push access** (or read-only). Never admin, maintain or triage.
 * It **never deletes** anything and **never changes a repository's visibility**.
-* It **only touches repositories ClassRepo created**: ones with the `classrepo` topic, or generated from the job's template. A repository that merely
+* It **only touches repositories ClassRepo created**: ones with the `classrepo` topic, or generated from the assignment's snapshot. A repository that merely
   has a matching name is left alone.
 * A job that asks for anything this version does not understand is **refused whole**, with an "update your bot" message, rather than half done.
 
@@ -60,7 +63,7 @@ The workflow needs `permissions: id-token: write` so the run can prove its ident
 
 ## Versions
 
-`v2.x` speaks protocol 2. A **patch** fixes a bug, a **minor** adds a capability without changing what existing jobs do, a **major** changes the
+`v3.x` speaks protocol 3. A **patch** fixes a bug, a **minor** adds a capability without changing what existing jobs do, a **major** changes the
 protocol (the server keeps working with the previous major for a while). When the bot claims a job it tells the server its version, so the server
 never sends a job to a bot that cannot do it, and your dashboard shows when yours needs updating. See [RELEASING.md](./RELEASING.md).
 

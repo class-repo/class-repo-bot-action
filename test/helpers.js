@@ -17,9 +17,11 @@ function seal(publicKeyB64, record) {
   return ['v1', 'kid', wrapped.toString('base64url'), iv.toString('base64url'), body.toString('base64url')].join('.');
 }
 
-const SENSITIVE = ['alice-gh', 'Alice Smith', 'alice@univ.edu', 'bob-gh', 'Bob Jones', 'bob@univ.edu', 'cs101/starter', 'lab1', 'cs101-org'];
+const SOURCE = 'cs101/starter'; // what the educator picked; only the snapshot job ever sees it
+const SNAPSHOT = 'classrepo-snapshot-abc123xyz';
+const SENSITIVE = ['alice-gh', 'Alice Smith', 'alice@univ.edu', 'bob-gh', 'Bob Jones', 'bob@univ.edu', SOURCE, 'lab1', 'cs101-org', SNAPSHOT];
 const BATCH = 'AbCdEfGhIjKlMnOpQrStUv';
-const TEMPLATE = 'cs101/starter';
+const TEMPLATE = `cs101-org/${SNAPSHOT}`; // what student jobs name: the snapshot in the target account
 
 // A GitHub whose every method must be one the bot is meant to use: reaching for anything else (deleting a repository,
 // changing visibility, ...) throws, so those rules are checked by the tests rather than only promised.
@@ -40,12 +42,14 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
   const repos = new Map(Object.entries(existing));
   let pendingCopy = githubOverrides.copyPending || 0;
   const sleeps = [];
+  const readmes = {};
   const looks = [];
   const notFound = () => { const e = new Error('nf'); e.status = 404; return e; };
   const github = strict('github', { rest: strict('rest', {
     repos: strict('repos', {
       get: async ({ repo }) => {
         if (repo === 'class-repo-tracking') return { data: { private: true } };
+        if (repo === SNAPSHOT && !repos.has(repo) && !githubOverrides.noSnapshot && !githubOverrides.creatingSnapshot) return { data: { topics: githubOverrides.snapshotTopics || ['classrepo', 'classrepo-snapshot'] } };
         if (!repos.has(repo)) throw notFound();
         return { data: repos.get(repo) };
       },
@@ -66,6 +70,12 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
         if (githubOverrides.invite) await githubOverrides.invite(a);
       },
       update: async a => {
+        if (a.is_template !== undefined) {
+          if (Object.keys(a).sort().join() !== 'is_template,owner,repo') throw new Error(`UNEXPECTED UPDATE: ${Object.keys(a)}`);
+          calls.push(['template', a.repo, a.is_template]);
+          if (githubOverrides.makeTemplate) await githubOverrides.makeTemplate(a);
+          return { data: {} };
+        }
         calls.push(['archived', a.repo, a.archived]);
         if (githubOverrides.update) await githubOverrides.update(a);
         repos.get(a.repo).archived = a.archived;
@@ -77,7 +87,7 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
         if (pendingCopy > 0) { pendingCopy--; throw notFound(); }
         return { data: [{ name: 'README.md' }] };
       },
-      createOrUpdateFileContents: async a => { calls.push(['badge', a.repo]); },
+      createOrUpdateFileContents: async a => { calls.push(['badge', a.repo]); readmes[a.repo] = Buffer.from(a.content, 'base64').toString('utf8'); },
       createInOrg: async () => ({ data: { private: true } }),
     }),
     users: strict('users', {
@@ -113,7 +123,7 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
     TRACKING_REPO: 'class-repo-tracking', RUNNER_TEMP: tmpDir,
   };
   const context = { repo: { owner: 'cs101-org', repo: 'class-repo-bot' } };
-  return { logs, secrets, core, github, deps, env, context, calls, requests, exec, tmpDir, repos, sleeps, looks };
+  return { logs, secrets, core, github, deps, env, context, calls, requests, exec, tmpDir, repos, sleeps, looks, readmes };
 }
 
-module.exports = { seal, setup, strict, SENSITIVE, BATCH, TEMPLATE };
+module.exports = { seal, setup, strict, SENSITIVE, BATCH, TEMPLATE, SOURCE, SNAPSHOT };

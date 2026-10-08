@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const run = require('../scripts/provision');
-const { seal, setup, SENSITIVE, BATCH, TEMPLATE } = require('./helpers');
+const { seal, setup, SENSITIVE, BATCH, TEMPLATE, SOURCE, SNAPSHOT } = require('./helpers');
 const { generateRosterKeyPair } = require('../scripts/roster-crypto');
 const vector = require('./vector.json');
 
@@ -16,7 +16,7 @@ const repoEntry = (pair, who, { sync_key = null, permission = 'push', settings =
 });
 
 const baseJob = (pair, extra = {}) => ({
-  protocol: 2, mode: 'ensure_repos', template: TEMPLATE, assignment_name: 'lab1', target_owner: 'cs101-org', shortcode: 'abc123xyz',
+  protocol: 3, mode: 'ensure_repos', template: TEMPLATE, assignment_name: 'lab1', target_owner: 'cs101-org', shortcode: 'abc123xyz',
   repos: [
     repoEntry(pair, { github: 'alice-gh', name: 'Alice Smith', email: 'alice@univ.edu' }, { sync_key: 'k1' }),
     repoEntry(pair, { github: 'bob-gh', name: 'Bob Jones', email: 'bob@univ.edu' }),
@@ -52,8 +52,8 @@ test('says which bot it is when it claims the job, so the server only asks for w
   await exercise(t);
   const claim = t.requests.find(r => r.url.endsWith('/claim')).body.bot;
   assert.match(claim.version, /^\d+\.\d+\.\d+$/);
-  assert.deepEqual(claim.protocols, [2]);
-  for (const c of ['ensure_repos', 'setup_keys', 'permission:push', 'permission:pull', 'setting:archived', 'marker:topic']) assert.ok(claim.capabilities.includes(c), c);
+  assert.deepEqual(claim.protocols, [3]);
+  for (const c of ['ensure_repos', 'snapshot', 'setup_keys', 'permission:push', 'permission:pull', 'setting:archived', 'marker:topic']) assert.ok(claim.capabilities.includes(c), c);
   assert.ok(!claim.capabilities.some(c => /admin|delete|public|maintain/.test(c)));
 });
 
@@ -156,7 +156,7 @@ test('also leaves alone a lookalike generated from a DIFFERENT template', async 
 test('recognises repositories made before labelling existed (generated from this template) and labels them', async () => {
   const pair = generateRosterKeyPair();
   const t = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem,
-    existing: { 'lab1-alice-gh': { topics: ['python'], archived: false, template_repository: { full_name: 'CS101/Starter' } } } });
+    existing: { 'lab1-alice-gh': { topics: ['python'], archived: false, template_repository: { full_name: 'CS101-ORG/' + SNAPSHOT.toUpperCase() } } } });
   await exercise(t);
   assert.deepEqual(t.calls, [['topics', 'lab1-alice-gh', ['python', 'classrepo']], ['invite', 'alice-gh', 'push']]);
   assert.deepEqual(results(t), [{ index: 0, status: 'ready' }]);
@@ -256,10 +256,10 @@ test('several collaborators: all are invited with their own permission, and the 
 
 test('a job from a newer protocol is refused as a whole, and the waiting students are told the bot needs updating', async () => {
   const pair = generateRosterKeyPair();
-  const t = setup({ job: baseJob(pair, { protocol: 3 }), privateKeyPem: pair.privateKeyPem });
+  const t = setup({ job: baseJob(pair, { protocol: 4 }), privateKeyPem: pair.privateKeyPem });
   await exercise(t);
   assert.deepEqual(t.calls, []);
-  assert.match(failedLines(t)[0], /protocol 3.*Update the bot/);
+  assert.match(failedLines(t)[0], /protocol 4.*Update the bot/);
   assert.deepEqual(results(t), [{ index: 0, status: 'failed', error: "Your instructor's ClassRepo bot needs updating, so this could not be done. Please let them know." }]);
 });
 
@@ -307,19 +307,6 @@ test('rejects invalid job fields before touching GitHub', async () => {
     assert.deepEqual(t.calls, []);
     assert.deepEqual(failedLines(t), ['FAILED: The job contains invalid names.']);
   }
-});
-
-test('honours the optional template-owner allow-list', async () => {
-  const pair = generateRosterKeyPair();
-  const t = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem });
-  t.env.ALLOWED_TEMPLATE_OWNERS = 'someone-else, another';
-  await exercise(t);
-  assert.deepEqual(t.calls, []);
-  assert.ok(failedLines(t).length === 1);
-  const ok = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem });
-  ok.env.ALLOWED_TEMPLATE_OWNERS = 'CS101';
-  await exercise(ok);
-  assert.equal(ok.calls.filter(c => c[0] === 'create').length, 2);
 });
 
 test('stops cleanly if the server refuses the claim or the batch id is bad', async () => {
@@ -403,7 +390,7 @@ test('setup_keys stores the private key as a secret and sends only the public ke
 test('setup_keys also introduces the bot, so the server knows its version straight after setup', async () => {
   const t = setup({ job: { mode: 'setup_keys' }, privateKeyPem: '' });
   await exercise(t);
-  assert.deepEqual(t.requests.find(r => r.url.endsWith('/claim')).body.bot.protocols, [2]);
+  assert.deepEqual(t.requests.find(r => r.url.endsWith('/claim')).body.bot.protocols, [3]);
 });
 
 test('setup_keys fails clearly if the secret cannot be stored, and does not register a key', async () => {
@@ -487,4 +474,118 @@ test('gives up with a clear message if GitHub never finishes the copy, and invit
   await exercise(t);
   assert.deepEqual(results(t).map(r => [r.status, /still copying/.test(r.error)]), [['failed', true]]);
   assert.equal(t.calls.filter(c => ['topics', 'invite', 'badge'].includes(c[0])).length, 0);
+});
+
+// ---------------------------------------------------------------------------------------------------------- snapshots
+
+const snapshotJob = (extra = {}) => ({ protocol: 3, mode: 'snapshot', template: SOURCE, assignment_name: SNAPSHOT, target_owner: 'cs101-org', shortcode: 'abc123xyz', ...extra });
+const snapshotRun = (job, overrides = {}, existing) => setup({ job, privateKeyPem: '', githubOverrides: { creatingSnapshot: true, ...overrides }, existing });
+
+test('a snapshot copies the starter into a private repository, labels it as ClassRepo\'s, and marks it as a template', async () => {
+  let created;
+  const t = snapshotRun(snapshotJob(), { create: a => { created = a; } });
+  await exercise(t);
+  assert.deepEqual(t.calls, [['create', SNAPSHOT, true], ['topics', SNAPSHOT, ['classrepo', 'classrepo-snapshot']], ['template', SNAPSHOT, true]]);
+  assert.deepEqual([created.template_owner, created.template_repo, created.owner, created.private], ['cs101', 'starter', 'cs101-org', true]);
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready' }]);
+  assert.deepEqual(failedLines(t), []);
+  assert.ok(!t.logs.some(l => l.includes(SOURCE)), 'the starter\'s name is not logged');
+});
+
+test('running a snapshot twice reuses the copy and does not copy again', async () => {
+  const t = snapshotRun(snapshotJob(), {}, { [SNAPSHOT]: { topics: ['classrepo', 'classrepo-snapshot'], archived: false } });
+  await exercise(t);
+  assert.equal(t.calls.filter(c => c[0] === 'create').length, 0);
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready' }]);
+});
+
+test('a snapshot never takes over a repository that merely has the same name', async () => {
+  const t = snapshotRun(snapshotJob(), {}, { [SNAPSHOT]: { topics: ['mine'], archived: false } });
+  await exercise(t);
+  assert.deepEqual(t.calls, []);
+  assert.deepEqual(results(t).map(r => r.status), ['failed']);
+});
+
+test('a snapshot only ever uses the reserved name, and refuses anything extra', async () => {
+  for (const extra of [{ assignment_name: 'lab1' }, { assignment_name: '../x' }, { template: 'not a template' }, { target_owner: 'a/b' }, { delete_after: true }]) {
+    const t = snapshotRun(snapshotJob(extra));
+    await exercise(t);
+    assert.deepEqual(t.calls, [], JSON.stringify(extra));
+    assert.deepEqual(results(t).map(r => r.status), ['failed']);
+  }
+});
+
+test('the optional allow-list of template owners applies to what a snapshot is copied from', async () => {
+  const blocked = snapshotRun(snapshotJob());
+  blocked.env.ALLOWED_TEMPLATE_OWNERS = 'someone-else, another';
+  await exercise(blocked);
+  assert.deepEqual(blocked.calls, []);
+  assert.deepEqual(results(blocked).map(r => r.status), ['failed']);
+  const ok = snapshotRun(snapshotJob());
+  ok.env.ALLOWED_TEMPLATE_OWNERS = 'CS101';
+  await exercise(ok);
+  assert.deepEqual(results(ok), [{ index: 0, status: 'ready' }]);
+});
+
+test('a snapshot reports failure, and does not mark anything as a template, if GitHub cannot copy', async () => {
+  const t = snapshotRun(snapshotJob(), { create: () => { const e = new Error('x'); e.status = 404; throw e; } });
+  await exercise(t);
+  assert.ok(!t.calls.some(c => c[0] === 'template'));
+  assert.match(results(t)[0].error, /Could not copy the template \(HTTP 404\)/);
+});
+
+test('students\' repositories are only generated from a snapshot this bot made in the target account', async () => {
+  const pair = generateRosterKeyPair();
+  for (const template of [SOURCE, 'cs101-org/starter', `other-org/${SNAPSHOT}`, `cs101-org/${SNAPSHOT}/x`]) {
+    const t = setup({ job: oneRepo(pair, ALICE, {}, { template }), privateKeyPem: pair.privateKeyPem });
+    await exercise(t);
+    assert.deepEqual(githubWrites(t), [], template);
+    assert.deepEqual(results(t).map(r => r.status), ['failed'], template);
+  }
+});
+
+test('and only if that repository really carries the snapshot label', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem, githubOverrides: { noSnapshot: true } });
+  await exercise(t);
+  assert.deepEqual(githubWrites(t), []);
+  assert.deepEqual(results(t).map(r => r.status), ['failed']);
+});
+
+// ----------------------------------------------------------------------------------------------- instructions link
+
+test('puts the instructions link above the Codespaces badge in the README, once', async () => {
+  const pair = generateRosterKeyPair();
+  const url = 'https://example.edu/cs101/lab1?x=1&y=2#top';
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { instructions_url: url, codespaces_badge: true } }), privateKeyPem: pair.privateKeyPem });
+  await exercise(t);
+  const readme = t.readmes['lab1-alice-gh'];
+  assert.ok(readme.startsWith(`**[Assignment instructions](${url})**\n\n[![Open in GitHub Codespaces]`), readme);
+  assert.equal(failedLines(t).length, 0);
+});
+
+test('an instructions link alone works too, and a link that is already there is not added again', async () => {
+  const pair = generateRosterKeyPair();
+  const url = 'https://example.edu/lab1';
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { instructions_url: url } }), privateKeyPem: pair.privateKeyPem });
+  await exercise(t);
+  assert.equal(t.readmes['lab1-alice-gh'], `**[Assignment instructions](${url})**\n`);
+});
+
+test('an instructions link that is not a plain https address refuses the whole job before anything is done', async () => {
+  const pair = generateRosterKeyPair();
+  for (const bad of ['http://example.edu/x', 'javascript:alert(1)', 'https://example.edu/a b', 'https://example.edu/x)[y](https://evil.example', 'https://example.edu/<script>', 'https://x.edu/"', 42, `https://example.edu/${'a'.repeat(400)}`]) {
+    const t = setup({ job: oneRepo(pair, ALICE, { settings: { instructions_url: bad } }), privateKeyPem: pair.privateKeyPem });
+    await exercise(t);
+    assert.deepEqual(t.calls, [], String(bad));
+    assert.equal(failedLines(t).length, 1, String(bad));
+  }
+});
+
+test('a repository with the snapshot\'s name but without ClassRepo\'s snapshot label is not used', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem, githubOverrides: { snapshotTopics: ['classrepo'] } });
+  await exercise(t);
+  assert.deepEqual(githubWrites(t), []);
+  assert.deepEqual(results(t).map(r => r.status), ['failed']);
 });
