@@ -64,7 +64,7 @@ The workflow needs `permissions: id-token: write` so the run can prove its ident
 ## Versions
 
 `v3.x` speaks protocol 3. A **patch** fixes a bug, a **minor** adds a capability without changing what existing jobs do, a **major** changes the
-protocol (the server keeps working with the previous major for a while). When the bot claims a job it tells the server its version, so the server
+protocol (while ClassRepo is in alpha the server does not keep older formats, so update when asked). When the bot claims a job it tells the server its version, so the server
 never sends a job to a bot that cannot do it, and your dashboard shows when yours needs updating. See [RELEASING.md](./RELEASING.md).
 
 ## When you do have to edit your workflow yourself
