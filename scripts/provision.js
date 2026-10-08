@@ -185,7 +185,8 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       if (record.github_id != null) {
         let login;
         try {
-          login = (await github.rest.users.getById({ account_id: Number(record.github_id) })).data.login;
+          // No users.getById in the Octokit that github-script ships, so call the endpoint directly.
+          login = (await github.request('GET /user/{account_id}', { account_id: Number(record.github_id) })).data.login;
         } catch (e) {
           throw new Error(e.status === 404 ? 'That GitHub account no longer exists.' : `Could not look up the GitHub account (HTTP ${e.status || 'error'}).`);
         }

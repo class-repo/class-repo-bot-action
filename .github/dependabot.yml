@@ -5,3 +5,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Only used by the tests, to check our calls against the Octokit that github-script ships. Not part of the action.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly

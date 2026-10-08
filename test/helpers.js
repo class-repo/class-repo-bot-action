@@ -73,11 +73,6 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
     }),
     users: strict('users', {
       getByUsername: async () => ({ data: { type: 'Organization' } }),
-      getById: async ({ account_id }) => {
-        calls.push(['lookup', account_id]);
-        if (githubOverrides.lookup) return githubOverrides.lookup(account_id);
-        return { data: { login: (githubOverrides.logins || {})[account_id] || `user${account_id}` } };
-      },
     }),
     actions: strict('actions', {
       setGithubActionsPermissionsRepository: async a => {
@@ -85,7 +80,15 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
         if (githubOverrides.actions) await githubOverrides.actions(a);
       },
     }),
-  }) });
+  }),
+  // Endpoints without a method in github-script's Octokit are called by route, so only these routes are allowed.
+  request: async (route, params) => {
+    if (route !== 'GET /user/{account_id}') throw new Error(`UNEXPECTED GITHUB CALL: request ${route}`);
+    const { account_id } = params;
+    calls.push(['lookup', account_id]);
+    if (githubOverrides.lookup) return githubOverrides.lookup(account_id);
+    return { data: { login: (githubOverrides.logins || {})[account_id] || `user${account_id}` } };
+  } });
   const requests = [];
   const fetch = async (url, init) => {
     const body = JSON.parse(init.body);
