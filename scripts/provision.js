@@ -47,7 +47,7 @@ const BOT = {
   version: BOT_VERSION,
   protocols: [PROTOCOL],
   capabilities: [
-    'ensure_repos', 'snapshot', 'check', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
+    'ensure_repos', 'snapshot', 'check', 'roster_repo', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
     ...SUPPORTED_SETTINGS.map(k => `setting:${k}`), 'marker:topic',
   ],
 };
@@ -91,9 +91,9 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
   const job = await claim.json();
   [job.template, job.assignment_name, job.target_owner, job.shortcode].forEach(mask);
 
-  // check: nothing to do. Claiming the job already told the server which bot this is, and that is the whole point: it lets the
-  // educator's setup check confirm, end to end, that this workflow runs and reaches the server, and which version it is.
-  if (job.mode === 'check') return core.info('check: this bot is running and reached the server.');
+  // check: claiming the job already told the server which bot this is, which lets the educator's setup check confirm, end to end, that
+  // this workflow runs and reaches the server, and which version it is. It also makes sure the roster repository works (see ensureRosterRepo).
+  if (job.mode === 'check') return check();
   if (job.mode === 'setup_keys') return setupKeys();
   if (job.mode === 'ensure_repos') return ensureRepos();
   if (job.mode === 'snapshot') return snapshot();
@@ -179,10 +179,50 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     }
   }
 
+  // Makes sure the educator's PRIVATE roster repository exists in `owner`, creating it if not. Returns { repo, created } or
+  // { problem: { code, http? } }. It is called early (by the setup check and when a snapshot is made) so that a problem shows up
+  // BEFORE any student joins, and again when the roster is written. Generating from a template works in a personal account as well
+  // as an organization (an app cannot create an EMPTY repository in a personal account). The roster is the most sensitive thing written
+  // anywhere, so nothing may run in this repository: Actions is turned off before anything is written to it.
+  async function ensureRosterRepo(owner, trackingRepo) {
+    let repo = null;
+    let created = false;
+    try {
+      repo = (await github.rest.repos.get({ owner, repo: trackingRepo })).data;
+    } catch (e) {
+      if (e.status !== 404) return { problem: { code: 'roster_failed', http: e.status } };
+      try {
+        await github.rest.repos.createUsingTemplate({ template_owner: TRACKING_TEMPLATE.owner, template_repo: TRACKING_TEMPLATE.repo, owner, name: trackingRepo, private: true, description: 'ClassRepo roster', include_all_branches: false });
+        created = true;
+        await github.rest.actions.setGithubActionsPermissionsRepository({ owner, repo: trackingRepo, enabled: false });
+        await waitForTemplateCopy(owner, trackingRepo);
+        await markTopics(owner, trackingRepo, [MARKER_TOPIC]);
+        repo = (await github.rest.repos.get({ owner, repo: trackingRepo })).data;
+      } catch (err) {
+        return { problem: { code: 'roster_failed', ...(err.status ? { http: err.status } : {}) } };
+      }
+    }
+    if (!repo.private) return { problem: { code: 'roster_public' } };
+    return { repo, created };
+  }
+
   // Tells the server the one result of a job that is not about students (a snapshot). A failure is a short code from a fixed
   // list (plus GitHub's HTTP status): the server owns the wording shown to the educator, so no free text travels back.
   async function reportOne(status, problem) {
     try { await call('results', { results: [{ index: 0, status, ...(problem || {}) }] }); } catch { core.warning('Could not send a status report to the server.'); }
+  }
+
+  async function check() {
+    const owner = context.repo.owner;
+    const trackingRepo = env.TRACKING_REPO || 'class-repo-tracking';
+    if (!NAME_RE.test(trackingRepo)) return core.setFailed('The roster repository name is not valid.');
+    const roster = await ensureRosterRepo(owner, trackingRepo);
+    if (roster.problem) {
+      await reportOne('failed', roster.problem);
+      return core.setFailed(`The roster repository is not ready (${roster.problem.code}${roster.problem.http ? `, HTTP ${roster.problem.http}` : ''}).`);
+    }
+    await reportOne('ready', { roster: roster.created ? 'created' : 'existing' });
+    core.info('check: this bot is running, reached the server, and the roster repository is ready.');
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -203,6 +243,12 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       return stop('owner_not_allowed', null, 'The template owner is not in this repository\'s allowed list (CLASSREPO_ALLOWED_TEMPLATE_OWNERS).');
     }
     const [templateOwner, templateRepo] = template.split('/');
+
+    // The roster repository for this account must work BEFORE anything is made, so a problem is found now and not at the first join.
+    const trackingRepo = env.TRACKING_REPO || 'class-repo-tracking';
+    if (!NAME_RE.test(trackingRepo)) return stop('invalid_job');
+    const roster = await ensureRosterRepo(owner, trackingRepo);
+    if (roster.problem) return stop(roster.problem.code, roster.problem.http);
 
     let existing = null;
     try {
@@ -431,25 +477,12 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     const files = fs.readdirSync(logDir).filter(f => f.endsWith('.txt'));
     if (files.length === 0) return;
 
-    let repo = null;
-    try {
-      repo = (await github.rest.repos.get({ owner, repo: trackingRepo })).data;
-    } catch (e) {
-      if (e.status !== 404) return core.warning('Could not check the tracking repository; roster not recorded.');
-      // Generating from a template works in a personal account as well as an organization (an app cannot create an EMPTY
-      // repository in a personal account). The roster is the most sensitive thing written anywhere, so nothing may run in
-      // this repository: Actions is turned off before anything is written to it.
-      try {
-        await github.rest.repos.createUsingTemplate({ template_owner: TRACKING_TEMPLATE.owner, template_repo: TRACKING_TEMPLATE.repo, owner, name: trackingRepo, private: true, description: 'ClassRepo roster', include_all_branches: false });
-        await github.rest.actions.setGithubActionsPermissionsRepository({ owner, repo: trackingRepo, enabled: false });
-        await waitForTemplateCopy(owner, trackingRepo);
-        await markTopics(owner, trackingRepo, [MARKER_TOPIC]);
-        repo = (await github.rest.repos.get({ owner, repo: trackingRepo })).data;
-      } catch {
-        return core.warning('Could not create the tracking repository; roster not recorded.');
-      }
+    const roster = await ensureRosterRepo(owner, trackingRepo);
+    if (roster.problem) {
+      return core.warning(roster.problem.code === 'roster_public'
+        ? 'The tracking repository is public, so the roster was NOT recorded. Make it private.'
+        : 'Could not create or check the tracking repository; roster not recorded.');
     }
-    if (!repo.private) return core.warning('The tracking repository is public, so the roster was NOT recorded. Make it private.');
 
     const dir = path.join(tmp, 'tracking');
     fs.rmSync(dir, { recursive: true, force: true });

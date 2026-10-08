@@ -629,7 +629,7 @@ test('does not write the roster if Actions cannot be turned off on a roster repo
   const t = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem, githubOverrides: { noTracking: true, actions: a => { if (a.repo === 'class-repo-tracking') throw new Error('no'); } } });
   await exercise(t);
   assert.equal(t.exec.length, 0);
-  assert.ok(t.logs.some(l => l.includes('Could not create the tracking repository')));
+  assert.ok(t.logs.some(l => l.includes('Could not create or check the tracking repository')));
 });
 
 test('uses a roster repository the educator already made as it is, without changing it', async () => {
@@ -642,14 +642,51 @@ test('uses a roster repository the educator already made as it is, without chang
 
 // ------------------------------------------------------------------------------------------------------------ check
 
-test('a check job only introduces the bot: no GitHub calls, no roster key needed, and it succeeds', async () => {
-  const t = setup({ job: { protocol: 3, mode: 'check', shortcode: null }, privateKeyPem: '' });
+const checkJob = () => ({ protocol: 3, mode: 'check', shortcode: null });
+
+test('a check job introduces the bot and finds the existing private roster repository fine, touching nothing', async () => {
+  const t = setup({ job: checkJob(), privateKeyPem: '' });
   await exercise(t);
   assert.deepEqual(t.calls, []);
   assert.equal(t.exec.length, 0);
   assert.deepEqual(failedLines(t), []);
-  assert.equal(t.requests.filter(r => r.url.endsWith('/results')).length, 0);
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready', roster: 'existing' }]);
   const claim = t.requests.find(r => r.url.endsWith('/claim')).body.bot;
   assert.deepEqual(claim.protocols, [3]);
-  assert.ok(claim.capabilities.includes('check'));
+  for (const c of ['check', 'roster_repo']) assert.ok(claim.capabilities.includes(c), c);
+});
+
+test('a check job creates a missing roster repository (private, Actions off first) and says it did', async () => {
+  const t = setup({ job: checkJob(), privateKeyPem: '', githubOverrides: { noTracking: true } });
+  await exercise(t);
+  assert.deepEqual(t.calls.filter(c => c[1] === 'class-repo-tracking'), [['create', 'class-repo-tracking', true], ['actions', 'class-repo-tracking', false], ['topics', 'class-repo-tracking', ['classrepo']]]);
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready', roster: 'created' }]);
+});
+
+test('a check job fails, with a code and no free text, when the roster repository cannot be made or is public', async () => {
+  const cannot = setup({ job: checkJob(), privateKeyPem: '', githubOverrides: { noTracking: true, create: a => { if (a.name === 'class-repo-tracking') { const e = new Error('Resource not accessible by integration: cs101-org'); e.status = 403; throw e; } } } });
+  await exercise(cannot);
+  assert.deepEqual(results(cannot), [{ index: 0, status: 'failed', code: 'roster_failed', http: 403 }]);
+  assert.equal(failedLines(cannot).length, 1);
+
+  const open = setup({ job: checkJob(), privateKeyPem: '' });
+  const original = open.github.rest.repos.get;
+  open.github.rest.repos.get = async a => a.repo === 'class-repo-tracking' ? { data: { private: false } } : original(a);
+  await exercise(open);
+  assert.deepEqual(results(open), [{ index: 0, status: 'failed', code: 'roster_public' }]);
+});
+
+test('a snapshot makes sure the roster repository works first, and makes nothing if it does not', async () => {
+  const t = snapshotRun(snapshotJob(), { noTracking: true, create: a => { if (a.name === 'class-repo-tracking') { const e = new Error('x'); e.status = 403; throw e; } } });
+  await exercise(t);
+  assert.deepEqual(t.calls.filter(c => c[1] === SNAPSHOT), []);
+  assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'roster_failed', http: 403 }]);
+});
+
+test('a snapshot for a new account also creates that account\'s roster repository, before the snapshot', async () => {
+  const t = snapshotRun(snapshotJob(), { noTracking: true });
+  await exercise(t);
+  const names = t.calls.map(c => c[1]);
+  assert.ok(names.indexOf('class-repo-tracking') !== -1 && names.indexOf('class-repo-tracking') < names.indexOf(SNAPSHOT), names.join());
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready' }]);
 });

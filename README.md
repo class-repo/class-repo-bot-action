@@ -6,7 +6,7 @@ repository (made from the [`class-repo-bot`](https://github.com/class-repo/class
 *uses this action, pinned to an exact commit*, and GitHub proposes updates to you as pull requests.
 
 ```yaml
-- uses: class-repo/class-repo-bot-action@<exact commit>   # v3.2.0
+- uses: class-repo/class-repo-bot-action@<exact commit>   # v3.3.0
   with:
     batch-id: ${{ inputs.batch_id }}
     server-url: ${{ inputs.server_url }}
@@ -35,7 +35,8 @@ Executor App's key. It enforces these rules whatever the server asks:
 Student names, emails and handles arrive encrypted and are opened only with your roster key. Nothing identifying is written to the run's logs
 (they may be public): progress is reported as "repository 3 of 40". The roster is only ever written to your **private** tracking repository. If you have none, the bot makes one from
 [`class-repo-tracking-template`](https://github.com/class-repo/class-repo-tracking-template) (a README and nothing that can run), turns GitHub Actions off in it
-before writing anything, and labels it. It works in a personal account as well as an organization.
+before writing anything, and labels it. It does this early (when you run the setup check, and when an assignment's snapshot is made), so a problem
+shows up before any student joins. It works in a personal account as well as an organization.
 `docs/PROTOCOL.md` in [`class-repo-site`](https://github.com/class-repo/class-repo-site) describes the job format and what each future feature would cost.
 
 ## Trusting this action
