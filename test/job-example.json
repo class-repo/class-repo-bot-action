@@ -1,18 +1,18 @@
 {
   "note": "Real protocol 3 jobs as the server produces them, with a TEST-ONLY roster key. Copied to class-repo-bot-action/test/job-example.json.",
-  "rosterPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDRERGIE7RQNIMV\nuHFLkZETA7WpOHQCvb7qH2b2Vn10zPQmv5zLTscb5nL26E4OMalKG1TNHUueD4P0\njTvbuIZ4NX5fj/TB9MdbrnuhPltQDYY/cNzgB0NcP5DFHNkRb7NphOZ3HQrwUQVC\nmdXdJ4joPiNYFLAaOYOXX3k1FYZkTPjzlUB5LXazgAeuNWSkiVUROVJbVayrduir\nnBpWPWq3WEDZXw1YQQd6SE6lU7/iCPj+bZUqd2QlYrpkXbYesuopkc94gMFOzP40\nl0RnTEUMWOee3I98FaNDMLoLG5bvvgXo2ras3Gsj/7r8kefdnDUf5G6Y5DBUdDOI\nZNPTZEfJAgMBAAECggEAOdk1NqftHrxJATuV7ckLkW1XWMmMIC4Mo4+o18S61hTY\nAdjHM+JKacfsS7Gf14GaTC0f29mdUNEOPB7QT03Rt3Vl0F9u5DQs7YtsHgO5FH+J\nhAhgtYSM+PuFvWTsE00LIclqU88vdauVfwY+DQGhelGnSfn/eGItrTb3vN6F3z6E\nsBMZPy34BdLb3fCyaAAxa7waAnLr6oOf/UWwJm06qM+vZcmpZPIkzWUNKF9rW6w7\nVmKmI7H44r8zuzEdFSua2Xad7b0470T/yULHN9pfi72bGhnL/0uwH0ZBTmhMM0GE\noplFw/8zBehQbpbFvajx4vaQc6v85HHgG897SP4qWQKBgQD7ua7koOd4fff7gOV3\nGDrCP3fj2sA2+ooLFMQBITrjzBxuNegFvEpagAit+KGeFXLc2D3Ke/a8mDbIuvhm\niX/orFsbx6j/IIHKGcH0kZqbSZF4jCuMtU4ELay63ucwcK495kL8Gcijw/ddsHBF\n8eKTn/hshwnHF+D3Hytb+cNzYwKBgQDUne/TqsVXPBHAGkY9GjQuwheiatSO4lA+\nOPEJl4cn/qdrrPcG84ZHVzncLBvfhJhFDUjFicSpoXFPDhhs1Fl9I9wbVW6pPjgE\nf4lwjKEnkjMp9a6jRdafPWfBGru39V394SLrJdNHAa7iopFSk5FugoqUdgWocm9t\nWG5Opk5d4wKBgQCaEKBxP+XLwlV3cgF/ba3w24WWSHlibN72P0RjaKIxb+hqr8WN\nVRuw3jHxwH2yUnBVqGfROSPfc8379ys3HqrRjkPI8d+GHrAxMKib9k3JAzLss+Wn\nngPc3NOeH/UhmaWbLwYKZAF/8d3BUs60kIHbVopmahPa7ct7lHEmPuyX/wKBgCYz\nZkaylRhSW6IXVm1eCugnyVVOOnidous7Edu2VPtTnsMS5aNjF8ozmtq7NhrX2P/3\nHg8X7LTJo/EfSDYthRKd4csrc2GHI0tzmr8VFVNlyjmMwd7mCmS8BKtGYVnxBP07\neSmktyw32jMwIEok52linQGFnwif3vNXgyIwcT4fAoGAD0yE531qg17ssFrUCOnP\nb3VLIqC8loVj0HCHPOODxHj3VSqu8QtiRv4xVIpAAqGpi0Mu/zP3GdOTiGWQ1Ycd\nILvNMMCok2enq3MQ6svZzCnS9gS7S6BGBQc3xQJA6pXRpNKd8wRkdX7Q+Eo1psSF\n5ZlO9CE0IqKnjPyuFdWpKr0=\n-----END PRIVATE KEY-----\n",
+  "rosterPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDlsz1AQesQMpQ+\nPxtdjAf48kGkBtgNzXFkUGlXQKkFhkaYszOZ91hxo4WE/8PevkJw1hz9BThuOWUS\nfT66hbNrRU+yquxzYgofdqlp8sJgN8AVcQ3FZkQgwlEemlkmgCvxhZdPj4c7OVtx\nDHGe0qOK5hOzOmvEYflt3VlrlpYTg713OP0tTTrayr9RFDsRIoEf7UFfKgRd45wY\nIU3cP/xNubf+NYtknC7X9efOb5FbfI8x/LQck4KBOchnvuAQGblAb+1UqmfxMB85\nAhNcfGKiGF893IJhVtb83tBdq3+NbZeLVR0BD7nKxTslyHoCZ4gXkrUgOHMq6EnM\n1vScIMVbAgMBAAECggEACKFieZqnjhKFxCmhnzMfqch9TI5e1FgnsgckF+Ebrf6D\nu09g0lmF2XiKrD5UG75y3LyWwXbAP/uFFNS0pGJ1+l+pQYp2aY3d9Z0DJflv46bS\n0Q0zqFBZE4KwrXa9Djeo9iFVO1vfQLY9RJadDLZXsbm4ihogVQJy7q5vPvNV/olO\ndQUHG7ljSbQb6n7ez++GlSX///qeueV5xdavHHQm1Pdx3T9UmmzpGAcVpytEyx+S\nhYmCbWoIxHSz67Z7o04+aI6ds/k+V4WKWcVA6sTpzW1sPT2a4u6RqiqnYN2FQbYQ\nbxMWsX/3pi/ipG2XU68bVZJRC9sRkcKWLa0gEkxaLQKBgQD6O61AxDdK4/3ECLDi\n7PqE2/M2EOLiI9XKtbj91bO0OkQ24gr3HOMGTNN3Wt72rHs81LAr85vd9aDLNgTz\nK63fCuQeUslOsSmbAcE4+yvHnIaAzueJMNQ9c5dJb1SjcyHCAiSarDenRFV9t4Iw\nFXKzDJ1uuD3cnAIXJlmbkI5QZwKBgQDq/mwcoEv658tdDNPKNcKix9LPqVUIMZDR\ncy3WiPX+sCxlDe0VKcqvlPmpKRsYFM++oy7EZdehvr1O9Y7zpJ3yU5DsCeVXBIMx\nuQBP8Z4ItXiPNRUbsins+MhMmuyl1R190m4KH1Z6KUlvdbN4g2qoAIXdgX12rSXp\nP1rFdu867QKBgQCJDdyDx7SdISihkT0I3VENKccZCsCpqYT0RPnwlXaatPsdsErf\nNAQoNDXyfmP2aVwKYleniwMI2/rYslqdsYPG0RlGfoNhxWkLTDe/dNpytwl4TVrF\namgkzEXFY+PQrkOEFlZkHQVSaPwGIld87JJo/PTRarn/NbdzZH7Z1KAN6wKBgF92\nEXcjixoXFZ7sOhEX+8RixnnDgR59/CWJ06ImK0BWUwKOQLRrMMJZE36riy0iLy5z\nXek8sfcr4/1ydar2QY+ScPniHz9VPvJxA/Z14cwJ5DrQxo1kt/FjMwMjoGTRiVR2\nqmsERf4ETaewucKIKEitRbQxCUWvmwoAyaAT66UVAoGAXBi5tKCQRZ1PLDTqXdYG\n+dRKMMM/8sgTAB6iQOS0qxtWolTR6K0xisCAVfbSeZKa6zqwjPetH022S7r3knoo\nTzXYRRiJ4poYQHux1VB1aCVY1QRObnBETKZPTQcnQfMt3X0G+r8U7H6aL9dO2u/c\n+Sl8CWoYsMOwnEntdGm2H1o=\n-----END PRIVATE KEY-----\n",
   "job": {
     "protocol": 4,
     "mode": "ensure_repos",
-    "template": "cs101-org/classrepo-snapshot-abc123xyz",
+    "template": "myorg/classrepo-snapshot-abc123xyz",
     "assignment_name": "lab1",
-    "target_owner": "cs101-org",
+    "target_owner": "myorg",
     "repos": [
       {
         "sync_key": "3f2b8c1e-5d4a-4b6f-9c1d-0a1b2c3d4e5f",
         "collaborators": [
           {
-            "sealed": "v1.fda075be26639249.Tl9rWMA9OkfHOQ0dzdUBTA0VgqvZ6Z0zdSQoe8CyaPbbLb29dg60oQfPgBR2JPKWwShwL65ejdPPi9AKJ8xSUPiMXfDSlhDigsa4aR2dvnikYZ5pr9kJrG4uyiPkgxgrn0tW3iqlQvCoIDbRW2QURIEAnZPzIc6h8k8mUzDSy5qFEO6tWACpov_sP8zno2RIMeAqdlesnvfDdqww4oYghMDKRdVJi2ClUNAdf-oYx4Fgca_g5OjB6JSlqbeG3EKeNyTmcE83OVPjq10gUObE5t7Uqh3ArHsR2VMImlQt5inN5G1BOlNefpOmWPFUk05zMrI_4ptON9dLMwpK-hIL7Q.hsDR75GWuYYJI015.8hYnqwIKvWguc3Pc5MCOlC_P9spg0HieEuikT4X6ryMeLQc_dID80kP2BHpMCSotvGy6tzHIv-9Xfco6c3shzXEndViaiZjMch3ljrwY3T3KtuGS-Vn36rz-wLYrUuvM0_xcwg",
+            "sealed": "v1.fc4597d11fe159d7.bLbwD1Nwch7L6gg2h3MnqlMvnUbKs_F3Te9fkmRCh99vhlFeYEPKnBa4gLBELI6y6qtWfZMf3_zjSVRA3XultuzXaoJDCuqommCB1rPk8SUEt00CgFwxhMZCI0lm96uSr28HjuLo7RQZPvbHzZS6kaJ7iWcvdawCGVSZpeA_gjjWUV7QHgHUuSCCppqoqaMNt7G52iDHLawKv49oHWUXYYICgIlwnDCU89IvMVKYWk_bT0XxPQhU9zkizv1fZualBc5IawkRXlplOoXmN_2NM-qFByoZgV4uqcQSiZo898jVUZ7V_CK9jhuYhQ51avdntS3hBA-tOReGY-grSfF8Vg.jdKHiLguNqWZfsbg.XI0jtfM2ems46a3DoMHuco2jQMnVdTSfuX3tZ8AumfEBluJyEJmMh3_FU4X6og957pbFtRSUawyVMk-8yI8D-v3q1kWAzbuHShV2aEeid7f-Nn6dxGS4DXcuzpAXh7uX8Uk7BA",
             "permission": "push"
           }
         ],
@@ -29,8 +29,8 @@
     "protocol": 4,
     "mode": "snapshot",
     "template": "cs101/starter",
-    "assignment_name": "classrepo-snapshot-mk31wbj1nwb3",
-    "target_owner": "cs101-org",
-    "shortcode": "mk31wbj1nwb3"
+    "assignment_name": "classrepo-snapshot-6z8ytfbkeoq5",
+    "target_owner": "myorg",
+    "shortcode": "6z8ytfbkeoq5"
   }
 }
