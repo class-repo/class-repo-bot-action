@@ -725,3 +725,42 @@ test('a snapshot for a new account also creates that account\'s roster repositor
   assert.ok(names.indexOf('class-repo-tracking') !== -1 && names.indexOf('class-repo-tracking') < names.indexOf(SNAPSHOT), names.join());
   assert.deepEqual(results(t), [{ index: 0, status: 'ready' }]);
 });
+
+// ------------------------------------------------------------------------------- "none": the educator keeps their own records
+
+test('with the roster repository set to none, setup makes and checks no roster repository, and says so', async () => {
+  for (const value of ['none', 'NONE']) {
+    const t = setup({ job: setupJob(), privateKeyPem: '', githubOverrides: { noTracking: true } });
+    t.env.TRACKING_REPO = value;
+    await exercise(t);
+    assert.deepEqual(t.calls, [], value);
+    assert.deepEqual(results(t), [{ index: 0, status: 'ready', key: 'created', roster: 'none' }], value);
+  }
+});
+
+test('with none, a snapshot does not touch a roster repository, and student jobs write no roster anywhere', async () => {
+  const snap = snapshotRun(snapshotJob(), { noTracking: true });
+  snap.env.TRACKING_REPO = 'none';
+  await exercise(snap);
+  assert.ok(!snap.calls.some(c => c[1] === 'class-repo-tracking' || c[1] === 'none'));
+  assert.deepEqual(results(snap), [{ index: 0, status: 'ready' }]);
+
+  const pair = generateRosterKeyPair();
+  const students = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem, githubOverrides: { noTracking: true } });
+  students.env.TRACKING_REPO = 'none';
+  await exercise(students);
+  assert.equal(students.exec.length, 0, 'no clone, commit or push of any roster');
+  assert.ok(!students.calls.some(c => c[1] === 'none' || c[1] === 'class-repo-tracking'));
+  assert.deepEqual(results(students), [{ index: 0, status: 'ready' }]);
+  assert.equal(failedLines(students).length, 0);
+});
+
+test('a roster repository name other than the default is used for the setup check and for the roster', async () => {
+  const t = setup({ job: setupJob(), privateKeyPem: '', githubOverrides: { noTracking: true } });
+  t.env.TRACKING_REPO = 'my-roster';
+  const original = t.github.rest.repos.get;
+  t.github.rest.repos.get = async a => a.repo === 'my-roster' ? (t.repos.has('my-roster') ? { data: t.repos.get('my-roster') } : (() => { const e = new Error('nf'); e.status = 404; throw e; })()) : original(a);
+  await exercise(t);
+  assert.deepEqual(t.calls.filter(c => c[1] === 'my-roster').map(c => c[0]), ['create', 'actions', 'topics']);
+  assert.equal(results(t)[0].roster, 'created');
+});

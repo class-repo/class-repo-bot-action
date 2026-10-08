@@ -26,13 +26,13 @@ jobs:
     steps:
       - name: Run the ClassRepo bot
         # Pinned to an exact commit. Dependabot proposes updates when a new version is released; read the changes before you merge them.
-        uses: class-repo/class-repo-bot-action@REPLACE_WITH_RELEASE_COMMIT # v4.0.0
+        uses: class-repo/class-repo-bot-action@REPLACE_WITH_RELEASE_COMMIT # v4.1.0
         with:
           batch-id: ${{ inputs.batch_id }}
           server-url: ${{ inputs.server_url }}
           app-id: ${{ secrets.CLASSREPO_APP_ID }}
           app-private-key: ${{ secrets.CLASSREPO_APP_PRIVATE_KEY }}
           roster-private-key: ${{ secrets.CLASSREPO_ROSTER_PRIVATE_KEY }}
-          tracking-repo: ${{ vars.CLASSREPO_TRACKER_NAME || 'class-repo-tracking' }}
+          tracking-repo: ${{ secrets.CLASSREPO_TRACKER_NAME || vars.CLASSREPO_TRACKER_NAME || 'class-repo-tracking' }}
           # Optional: comma-separated owners whose repositories may be used as templates.
           allowed-template-owners: ${{ vars.CLASSREPO_ALLOWED_TEMPLATE_OWNERS }}

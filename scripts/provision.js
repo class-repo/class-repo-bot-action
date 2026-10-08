@@ -181,6 +181,8 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
   // as an organization (an app cannot create an EMPTY repository in a personal account). The roster is the most sensitive thing written
   // anywhere, so nothing may run in this repository: Actions is turned off before anything is written to it.
   async function ensureRosterRepo(owner, trackingRepo) {
+    // "none": the educator keeps their own records, so no roster repository is made, checked or written to.
+    if (/^none$/i.test(trackingRepo)) return { off: true };
     let repo = null;
     let created = false;
     try {
@@ -255,7 +257,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     if (roster.problem) {
       return stop(roster.problem, `The roster repository is not ready (${roster.problem.code}${roster.problem.http ? `, HTTP ${roster.problem.http}` : ''}).`);
     }
-    await reportOne('ready', { key, roster: roster.created ? 'created' : 'existing' });
+    await reportOne('ready', { key, roster: roster.off ? 'none' : roster.created ? 'created' : 'existing' });
     core.info('setup: the encryption key and the roster repository are ready.');
   }
 
@@ -512,6 +514,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     if (files.length === 0) return;
 
     const roster = await ensureRosterRepo(owner, trackingRepo);
+    if (roster.off) return; // the educator keeps their own records
     if (roster.problem) {
       return core.warning(roster.problem.code === 'roster_public'
         ? 'The tracking repository is public, so the roster was NOT recorded. Make it private.'

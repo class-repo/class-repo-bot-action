@@ -6,7 +6,7 @@ repository (made from the [`class-repo-bot`](https://github.com/class-repo/class
 *uses this action, pinned to an exact commit*, and GitHub proposes updates to you as pull requests.
 
 ```yaml
-- uses: class-repo/class-repo-bot-action@<exact commit>   # v4.0.0
+- uses: class-repo/class-repo-bot-action@<exact commit>   # v4.1.0
   with:
     batch-id: ${{ inputs.batch_id }}
     server-url: ${{ inputs.server_url }}
@@ -59,7 +59,7 @@ Using an action means running its code with the secrets you pass it (here: your 
 | `batch-id`, `server-url` | yes | Set by the ClassRepo server when it starts the workflow. |
 | `app-id`, `app-private-key` | yes | Your Executor App (secrets `CLASSREPO_APP_ID`, `CLASSREPO_APP_PRIVATE_KEY`). |
 | `roster-private-key` | no | Your roster key (secret `CLASSREPO_ROSTER_PRIVATE_KEY`). Absent on the first run, which creates it. |
-| `tracking-repo` | no | Your private roster repository (default `class-repo-tracking`). |
+| `tracking-repo` | no | Your private roster repository: its name (default `class-repo-tracking`), or `none` if you keep your own records and want no roster repository made or written. The workflow reads it from the `CLASSREPO_TRACKER_NAME` Actions secret (written when the Executor app is installed), then a variable of that name, then the default. |
 | `allowed-template-owners` | no | Comma-separated owners whose repositories may be used as templates. |
 
 The workflow needs `permissions: id-token: write` so the run can prove its identity to the ClassRepo server. Nothing else.
@@ -74,6 +74,10 @@ never sends a job to a bot that cannot do it, and your dashboard shows when your
 
 Updating the action changes nothing in your own repository's files. The one case that needs a manual edit is a release that **adds a new secret,
 input or app permission**: those releases say so at the top of their notes, and we group such changes together so they are rare.
+
+`v4.1` is one of them, in a small way: the example workflow now reads the roster repository's name from the `CLASSREPO_TRACKER_NAME` secret. A workflow that
+still reads only the variable keeps working and uses the default name `class-repo-tracking`. To use the secret, change the `tracking-repo:` line to match
+[`examples/provision.yml`](./examples/provision.yml).
 
 ## `tools/provision.sh`
 
