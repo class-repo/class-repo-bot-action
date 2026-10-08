@@ -639,3 +639,17 @@ test('uses a roster repository the educator already made as it is, without chang
   assert.deepEqual(trackingCalls(t), []);
   assert.ok(t.exec.some(e => e.args[0] === 'push'));
 });
+
+// ------------------------------------------------------------------------------------------------------------ check
+
+test('a check job only introduces the bot: no GitHub calls, no roster key needed, and it succeeds', async () => {
+  const t = setup({ job: { protocol: 3, mode: 'check', shortcode: null }, privateKeyPem: '' });
+  await exercise(t);
+  assert.deepEqual(t.calls, []);
+  assert.equal(t.exec.length, 0);
+  assert.deepEqual(failedLines(t), []);
+  assert.equal(t.requests.filter(r => r.url.endsWith('/results')).length, 0);
+  const claim = t.requests.find(r => r.url.endsWith('/claim')).body.bot;
+  assert.deepEqual(claim.protocols, [3]);
+  assert.ok(claim.capabilities.includes('check'));
+});

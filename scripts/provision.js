@@ -47,7 +47,7 @@ const BOT = {
   version: BOT_VERSION,
   protocols: [PROTOCOL],
   capabilities: [
-    'ensure_repos', 'snapshot', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
+    'ensure_repos', 'snapshot', 'check', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
     ...SUPPORTED_SETTINGS.map(k => `setting:${k}`), 'marker:topic',
   ],
 };
@@ -91,6 +91,9 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
   const job = await claim.json();
   [job.template, job.assignment_name, job.target_owner, job.shortcode].forEach(mask);
 
+  // check: nothing to do. Claiming the job already told the server which bot this is, and that is the whole point: it lets the
+  // educator's setup check confirm, end to end, that this workflow runs and reaches the server, and which version it is.
+  if (job.mode === 'check') return core.info('check: this bot is running and reached the server.');
   if (job.mode === 'setup_keys') return setupKeys();
   if (job.mode === 'ensure_repos') return ensureRepos();
   if (job.mode === 'snapshot') return snapshot();

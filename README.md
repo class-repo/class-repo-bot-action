@@ -6,7 +6,7 @@ repository (made from the [`class-repo-bot`](https://github.com/class-repo/class
 *uses this action, pinned to an exact commit*, and GitHub proposes updates to you as pull requests.
 
 ```yaml
-- uses: class-repo/class-repo-bot-action@<exact commit>   # v3.1.0
+- uses: class-repo/class-repo-bot-action@<exact commit>   # v3.2.0
   with:
     batch-id: ${{ inputs.batch_id }}
     server-url: ${{ inputs.server_url }}
