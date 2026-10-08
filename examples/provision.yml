@@ -1,0 +1,38 @@
+# Provision Student Repositories
+#
+# Started by the ClassRepo server (workflow_dispatch). This repository may be public, so the dispatch carries only a random
+# batch id: the job itself (template, assignment and the encrypted student records) is fetched from the server by the bot,
+# using this run's GitHub identity (OIDC). The work is done by the ClassRepo bot action, pinned to an exact commit.
+# To update the bot, merge the pull request that Dependabot opens when a new version is released.
+name: Provision Student Repositories
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_id:
+        description: 'Random id of the job to run (set by the ClassRepo server)'
+        required: true
+      server_url:
+        description: 'URL of the ClassRepo server'
+        required: true
+
+permissions: {}
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # lets this run prove its identity to the ClassRepo server (OIDC)
+    steps:
+      - name: Run the ClassRepo bot
+        # Pinned to an exact commit. Dependabot proposes updates when a new version is released; read the changes before you merge them.
+        uses: class-repo/class-repo-bot-action@REPLACE_WITH_RELEASE_COMMIT # v2.0.0
+        with:
+          batch-id: ${{ inputs.batch_id }}
+          server-url: ${{ inputs.server_url }}
+          app-id: ${{ secrets.CLASSREPO_APP_ID }}
+          app-private-key: ${{ secrets.CLASSREPO_APP_PRIVATE_KEY }}
+          roster-private-key: ${{ secrets.CLASSREPO_ROSTER_PRIVATE_KEY }}
+          tracking-repo: ${{ vars.CLASSREPO_TRACKER_NAME || 'class-repo-tracking' }}
+          # Optional: comma-separated owners whose repositories may be used as templates.
+          allowed-template-owners: ${{ vars.CLASSREPO_ALLOWED_TEMPLATE_OWNERS }}

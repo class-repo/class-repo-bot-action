@@ -1,0 +1,9 @@
+{
+  "name": "class-repo-bot",
+  "private": true,
+  "description": "Scripts and tests for the ClassRepo provisioning workflow",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "version": "2.0.0"
+}

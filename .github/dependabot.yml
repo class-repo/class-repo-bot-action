@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # The actions this action itself uses, and its CI. Updates arrive as pull requests; read them before merging.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
