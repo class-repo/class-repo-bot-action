@@ -16,7 +16,7 @@ const repoEntry = (pair, who, { sync_key = null, permission = 'push', settings =
 });
 
 const baseJob = (pair, extra = {}) => ({
-  protocol: 3, mode: 'ensure_repos', template: TEMPLATE, assignment_name: 'lab1', target_owner: 'cs101-org', shortcode: 'abc123xyz',
+  protocol: 4, mode: 'ensure_repos', template: TEMPLATE, assignment_name: 'lab1', target_owner: 'cs101-org', shortcode: 'abc123xyz',
   repos: [
     repoEntry(pair, { github: 'alice-gh', name: 'Alice Smith', email: 'alice@univ.edu' }, { sync_key: 'k1' }),
     repoEntry(pair, { github: 'bob-gh', name: 'Bob Jones', email: 'bob@univ.edu' }),
@@ -52,7 +52,7 @@ test('says which bot it is when it claims the job, so the server only asks for w
   await exercise(t);
   const claim = t.requests.find(r => r.url.endsWith('/claim')).body.bot;
   assert.match(claim.version, /^\d+\.\d+\.\d+$/);
-  assert.deepEqual(claim.protocols, [3]);
+  assert.deepEqual(claim.protocols, [4]);
   for (const c of ['ensure_repos', 'snapshot', 'setup_keys', 'permission:push', 'permission:pull', 'setting:archived', 'marker:topic']) assert.ok(claim.capabilities.includes(c), c);
   assert.ok(!claim.capabilities.some(c => /admin|delete|public|maintain/.test(c)));
 });
@@ -256,10 +256,10 @@ test('several collaborators: all are invited with their own permission, and the 
 
 test('a job from a newer protocol is refused as a whole, and the waiting students are told the bot needs updating', async () => {
   const pair = generateRosterKeyPair();
-  const t = setup({ job: baseJob(pair, { protocol: 4 }), privateKeyPem: pair.privateKeyPem });
+  const t = setup({ job: baseJob(pair, { protocol: 5 }), privateKeyPem: pair.privateKeyPem });
   await exercise(t);
   assert.deepEqual(t.calls, []);
-  assert.match(failedLines(t)[0], /protocol 4.*Update the bot/);
+  assert.match(failedLines(t)[0], /protocol 5.*Update the bot/);
   assert.deepEqual(results(t), [{ index: 0, status: 'failed', error: "Your instructor's ClassRepo bot needs updating, so this could not be done. Please let them know." }]);
 });
 
@@ -390,7 +390,7 @@ test('setup_keys stores the private key as a secret and sends only the public ke
 test('setup_keys also introduces the bot, so the server knows its version straight after setup', async () => {
   const t = setup({ job: { mode: 'setup_keys' }, privateKeyPem: '' });
   await exercise(t);
-  assert.deepEqual(t.requests.find(r => r.url.endsWith('/claim')).body.bot.protocols, [3]);
+  assert.deepEqual(t.requests.find(r => r.url.endsWith('/claim')).body.bot.protocols, [4]);
 });
 
 test('setup_keys fails clearly if the secret cannot be stored, and does not register a key', async () => {
@@ -478,7 +478,7 @@ test('gives up with a clear message if GitHub never finishes the copy, and invit
 
 // ---------------------------------------------------------------------------------------------------------- snapshots
 
-const snapshotJob = (extra = {}) => ({ protocol: 3, mode: 'snapshot', template: SOURCE, assignment_name: SNAPSHOT, target_owner: 'cs101-org', shortcode: 'abc123xyz', ...extra });
+const snapshotJob = (extra = {}) => ({ protocol: 4, mode: 'snapshot', template: SOURCE, assignment_name: SNAPSHOT, target_owner: 'cs101-org', shortcode: 'abc123xyz', ...extra });
 const snapshotRun = (job, overrides = {}, existing) => setup({ job, privateKeyPem: '', githubOverrides: { creatingSnapshot: true, ...overrides }, existing });
 
 test('a snapshot copies the starter into a private repository, labels it as ClassRepo\'s, and marks it as a template', async () => {
@@ -642,34 +642,69 @@ test('uses a roster repository the educator already made as it is, without chang
 
 // ------------------------------------------------------------------------------------------------------------ check
 
-const checkJob = () => ({ protocol: 3, mode: 'check', shortcode: null });
+const setupJob = () => ({ protocol: 4, mode: 'setup', shortcode: null });
+const pairForSetup = generateRosterKeyPair();
 
-test('a check job introduces the bot and finds the existing private roster repository fine, touching nothing', async () => {
-  const t = setup({ job: checkJob(), privateKeyPem: '' });
+test('a first setup run makes the key, stores it as a secret, registers only the public half, and finds the roster repository', async () => {
+  const t = setup({ job: setupJob(), privateKeyPem: '' });
   await exercise(t);
-  assert.deepEqual(t.calls, []);
-  assert.equal(t.exec.length, 0);
+  const gh = t.exec.find(e => e.cmd === 'gh');
+  assert.deepEqual(gh.args, ['secret', 'set', 'CLASSREPO_ROSTER_PRIVATE_KEY', '--repo', 'cs101-org/class-repo-bot']);
+  assert.match(gh.opts.input, /BEGIN PRIVATE KEY/);
+  const registered = t.requests.find(r => r.url.endsWith('/roster-key')).body;
+  assert.deepEqual(Object.keys(registered), ['public_key']);
+  assert.ok(!JSON.stringify(t.requests).includes('PRIVATE KEY'), 'the private key is never sent');
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready', key: 'created', roster: 'existing' }]);
   assert.deepEqual(failedLines(t), []);
-  assert.deepEqual(results(t), [{ index: 0, status: 'ready', roster: 'existing' }]);
   const claim = t.requests.find(r => r.url.endsWith('/claim')).body.bot;
-  assert.deepEqual(claim.protocols, [3]);
-  for (const c of ['check', 'roster_repo']) assert.ok(claim.capabilities.includes(c), c);
+  assert.deepEqual(claim.protocols, [4]);
+  for (const c of ['setup', 'roster_repo', 'setup_keys']) assert.ok(claim.capabilities.includes(c), c);
 });
 
-test('a check job creates a missing roster repository (private, Actions off first) and says it did', async () => {
-  const t = setup({ job: checkJob(), privateKeyPem: '', githubOverrides: { noTracking: true } });
+test('running setup again keeps the key it has, and registers its public half again (so a forgetful server is put right)', async () => {
+  const t = setup({ job: setupJob(), privateKeyPem: pairForSetup.privateKeyPem });
+  t.env.ROSTER_PRIVATE_KEY = pairForSetup.privateKeyPem;
+  await exercise(t);
+  assert.ok(!t.exec.some(e => e.cmd === 'gh'), 'no secret is written, so nothing is rotated');
+  assert.equal(t.requests.find(r => r.url.endsWith('/roster-key')).body.public_key, pairForSetup.publicKeyB64);
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready', key: 'existing', roster: 'existing' }]);
+});
+
+test('creates a missing roster repository in the same run (private, Actions off first) and says it did', async () => {
+  const t = setup({ job: setupJob(), privateKeyPem: '', githubOverrides: { noTracking: true } });
   await exercise(t);
   assert.deepEqual(t.calls.filter(c => c[1] === 'class-repo-tracking'), [['create', 'class-repo-tracking', true], ['actions', 'class-repo-tracking', false], ['topics', 'class-repo-tracking', ['classrepo']]]);
-  assert.deepEqual(results(t), [{ index: 0, status: 'ready', roster: 'created' }]);
+  assert.deepEqual(results(t), [{ index: 0, status: 'ready', key: 'created', roster: 'created' }]);
 });
 
-test('a check job fails, with a code and no free text, when the roster repository cannot be made or is public', async () => {
-  const cannot = setup({ job: checkJob(), privateKeyPem: '', githubOverrides: { noTracking: true, create: a => { if (a.name === 'class-repo-tracking') { const e = new Error('Resource not accessible by integration: cs101-org'); e.status = 403; throw e; } } } });
+test('setup fails with a code, makes no roster repository, and registers nothing if the key cannot be stored', async () => {
+  const t = setup({ job: setupJob(), privateKeyPem: '', githubOverrides: { noTracking: true }, execFile: () => { throw new Error('gh failed'); } });
+  await exercise(t);
+  assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'key_failed' }]);
+  assert.ok(!t.requests.some(r => r.url.endsWith('/roster-key')));
+  assert.deepEqual(t.calls, []);
+  assert.match(failedLines(t)[0], /Secrets permission/);
+});
+
+test('setup fails clearly if the key secret is unreadable, or the server refuses the public key', async () => {
+  const broken = setup({ job: setupJob(), privateKeyPem: '' });
+  broken.env.ROSTER_PRIVATE_KEY = 'not a key';
+  await exercise(broken);
+  assert.deepEqual(results(broken), [{ index: 0, status: 'failed', code: 'key_failed' }]);
+
+  const refused = setup({ job: setupJob(), privateKeyPem: '', rosterKeyStatus: 400 });
+  await exercise(refused);
+  assert.deepEqual(results(refused), [{ index: 0, status: 'failed', code: 'key_rejected', http: 400 }]);
+  assert.equal(refused.calls.length, 0, 'no roster repository work after a refused key');
+});
+
+test('setup fails, with a code and no free text, when the roster repository cannot be made or is public', async () => {
+  const cannot = setup({ job: setupJob(), privateKeyPem: '', githubOverrides: { noTracking: true, create: a => { if (a.name === 'class-repo-tracking') { const e = new Error('Resource not accessible by integration: cs101-org'); e.status = 403; throw e; } } } });
   await exercise(cannot);
   assert.deepEqual(results(cannot), [{ index: 0, status: 'failed', code: 'roster_failed', http: 403 }]);
   assert.equal(failedLines(cannot).length, 1);
 
-  const open = setup({ job: checkJob(), privateKeyPem: '' });
+  const open = setup({ job: setupJob(), privateKeyPem: '' });
   const original = open.github.rest.repos.get;
   open.github.rest.repos.get = async a => a.repo === 'class-repo-tracking' ? { data: { private: false } } : original(a);
   await exercise(open);

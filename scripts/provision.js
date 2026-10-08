@@ -21,11 +21,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const childProcess = require('child_process');
-const { generateRosterKeyPair, openSealed } = require('./roster-crypto');
+const { generateRosterKeyPair, publicKeyFromPrivate, openSealed } = require('./roster-crypto');
 const { version: BOT_VERSION } = require('../package.json');
 
 // Job format version. The server sends a job only to a bot that lists its protocol.
-const PROTOCOL = 3;
+const PROTOCOL = 4;
 const COPY_WAIT_ATTEMPTS = 30; // GitHub usually takes a few seconds; give up after about a minute
 const COPY_WAIT_MS = 2000;
 const MAX_REPOS = 200;
@@ -47,7 +47,7 @@ const BOT = {
   version: BOT_VERSION,
   protocols: [PROTOCOL],
   capabilities: [
-    'ensure_repos', 'snapshot', 'check', 'roster_repo', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
+    'ensure_repos', 'snapshot', 'setup', 'roster_repo', 'setup_keys', 'collaborators:multiple', ...ALLOWED_PERMISSIONS.map(p => `permission:${p}`),
     ...SUPPORTED_SETTINGS.map(k => `setting:${k}`), 'marker:topic',
   ],
 };
@@ -93,7 +93,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
 
   // check: claiming the job already told the server which bot this is, which lets the educator's setup check confirm, end to end, that
   // this workflow runs and reaches the server, and which version it is. It also makes sure the roster repository works (see ensureRosterRepo).
-  if (job.mode === 'check') return check();
+  if (job.mode === 'setup') return setupRun();
   if (job.mode === 'setup_keys') return setupKeys();
   if (job.mode === 'ensure_repos') return ensureRepos();
   if (job.mode === 'snapshot') return snapshot();
@@ -142,11 +142,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     core.setSecret(privateKeyPem);
     privateKeyPem.split('\n').forEach(mask);
     try {
-      execFile('gh', ['secret', 'set', ROSTER_SECRET, '--repo', `${context.repo.owner}/${context.repo.repo}`], {
-        input: privateKeyPem,
-        stdio: ['pipe', 'ignore', 'ignore'],
-        env: { ...env, GH_TOKEN: env.EXECUTOR_TOKEN },
-      });
+      storeRosterSecret(privateKeyPem);
     } catch {
       return core.setFailed('Could not store the roster key as an Actions secret. Check the Executor App has the Secrets permission on this repository.');
     }
@@ -212,17 +208,55 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     try { await call('results', { results: [{ index: 0, status, ...(problem || {}) }] }); } catch { core.warning('Could not send a status report to the server.'); }
   }
 
-  async function check() {
+  // Stores a private key as the roster Actions secret of THIS (bot) repository. Throws if it cannot.
+  function storeRosterSecret(privateKeyPem) {
+    execFile('gh', ['secret', 'set', ROSTER_SECRET, '--repo', `${context.repo.owner}/${context.repo.repo}`], {
+      input: privateKeyPem,
+      stdio: ['pipe', 'ignore', 'ignore'],
+      env: { ...env, GH_TOKEN: env.EXECUTOR_TOKEN },
+    });
+  }
+
+  // setup: everything the educator's final setup step needs, in one run, and safe to run again. (1) The encryption key: made only if
+  // this repository has none (rotating is the separate setup_keys job); if one exists its public half is worked out from it and sent
+  // again, so a server that has forgotten it is put right without replacing anything. (2) The private roster repository. (3) Claiming
+  // the job has already told the server which bot this is. The result is one report with fixed codes only.
+  async function setupRun() {
     const owner = context.repo.owner;
     const trackingRepo = env.TRACKING_REPO || 'class-repo-tracking';
     if (!NAME_RE.test(trackingRepo)) return core.setFailed('The roster repository name is not valid.');
+    const stop = async (problem, log) => { await reportOne('failed', problem); core.setFailed(log); };
+
+    let publicKeyB64;
+    let key;
+    if (env.ROSTER_PRIVATE_KEY) {
+      try {
+        publicKeyB64 = publicKeyFromPrivate(env.ROSTER_PRIVATE_KEY);
+      } catch {
+        return stop({ code: 'key_failed' }, 'The roster key secret in this repository cannot be read. Replace the encryption key from the ClassRepo setup page.');
+      }
+      key = 'existing';
+    } else {
+      const pair = generateRosterKeyPair();
+      core.setSecret(pair.privateKeyPem);
+      pair.privateKeyPem.split('\n').forEach(mask);
+      try {
+        storeRosterSecret(pair.privateKeyPem);
+      } catch {
+        return stop({ code: 'key_failed' }, 'Could not store the roster key as an Actions secret. Check the Executor App has the Secrets permission on this repository.');
+      }
+      publicKeyB64 = pair.publicKeyB64;
+      key = 'created';
+    }
+    const registered = await call('roster-key', { public_key: publicKeyB64 });
+    if (!registered.ok) return stop({ code: 'key_rejected', http: registered.status }, `The server did not accept the roster key (HTTP ${registered.status}). Run the setup again.`);
+
     const roster = await ensureRosterRepo(owner, trackingRepo);
     if (roster.problem) {
-      await reportOne('failed', roster.problem);
-      return core.setFailed(`The roster repository is not ready (${roster.problem.code}${roster.problem.http ? `, HTTP ${roster.problem.http}` : ''}).`);
+      return stop(roster.problem, `The roster repository is not ready (${roster.problem.code}${roster.problem.http ? `, HTTP ${roster.problem.http}` : ''}).`);
     }
-    await reportOne('ready', { roster: roster.created ? 'created' : 'existing' });
-    core.info('check: this bot is running, reached the server, and the roster repository is ready.');
+    await reportOne('ready', { key, roster: roster.created ? 'created' : 'existing' });
+    core.info('setup: the encryption key and the roster repository are ready.');
   }
 
   // ---------------------------------------------------------------------------------------------

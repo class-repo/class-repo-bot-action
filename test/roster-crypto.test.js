@@ -36,3 +36,11 @@ test('generates a usable 3072-bit pair', () => {
   assert.equal(key.asymmetricKeyDetails.modulusLength, 3072);
   assert.match(privateKeyPem, /BEGIN PRIVATE KEY/);
 });
+
+test('works out the public key of a private key we already hold, so it can be registered again', () => {
+  const { publicKeyFromPrivate, generateRosterKeyPair, keyId } = require('../scripts/roster-crypto');
+  const pair = generateRosterKeyPair();
+  assert.equal(publicKeyFromPrivate(pair.privateKeyPem), pair.publicKeyB64);
+  assert.equal(keyId(publicKeyFromPrivate(pair.privateKeyPem)), keyId(pair.publicKeyB64));
+  assert.throws(() => publicKeyFromPrivate('not a key'));
+});

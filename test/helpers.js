@@ -29,7 +29,7 @@ const strict = (name, target) => new Proxy(target, {
   get(t, prop) { if (!(prop in t)) throw new Error(`UNEXPECTED GITHUB CALL: ${name}.${String(prop)}`); return t[prop]; },
 });
 
-function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, execFile, existing = {} } = {}) {
+function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, rosterKeyStatus = 200, execFile, existing = {} } = {}) {
   const logs = [];
   const record = (level) => (msg) => logs.push(`${level}: ${msg}`);
   const secrets = [];
@@ -110,6 +110,7 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
     const body = JSON.parse(init.body);
     requests.push({ url, auth: init.headers.Authorization, body });
     if (url.endsWith('/claim')) return { ok: serverStatus === 200, status: serverStatus, json: async () => job };
+    if (url.endsWith('/roster-key')) return { ok: rosterKeyStatus === 200, status: rosterKeyStatus, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => ({}) };
   };
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prov-'));

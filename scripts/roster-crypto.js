@@ -20,6 +20,13 @@ function generateRosterKeyPair() {
   return { publicKeyB64: publicKey.toString('base64'), privateKeyPem: privateKey };
 }
 
+/** The public half (base64 SPKI DER) of a private key we already hold. Throws if the text is not a usable RSA private key. */
+function publicKeyFromPrivate(privateKeyPem) {
+  const key = crypto.createPublicKey(crypto.createPrivateKey(privateKeyPem));
+  if (key.asymmetricKeyType !== 'rsa') throw new Error('Not an RSA key');
+  return key.export({ type: 'spki', format: 'der' }).toString('base64');
+}
+
 /** First 8 bytes of SHA-256 over the SPKI DER, as hex. The server computes the same value. */
 function keyId(publicKeyB64) {
   return crypto.createHash('sha256').update(Buffer.from(publicKeyB64, 'base64')).digest().subarray(0, 8).toString('hex');
@@ -40,4 +47,4 @@ function openSealed(sealed, privateKeyPem) {
   return JSON.parse(plain.toString('utf8'));
 }
 
-module.exports = { generateRosterKeyPair, keyId, openSealed };
+module.exports = { generateRosterKeyPair, publicKeyFromPrivate, keyId, openSealed };
