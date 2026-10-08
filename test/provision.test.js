@@ -466,3 +466,25 @@ test('a lookup that returns something that is not a handle is refused', async ()
   assert.deepEqual(t.calls, [['lookup', 5]]);
   assert.equal(results(t)[0].status, 'failed');
 });
+
+// ---------------------------------------------------------------------------------- waiting for GitHub's template copy
+
+test('waits for GitHub to finish copying the template before labelling, inviting or writing anything into the repository', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { codespaces_badge: true } }), privateKeyPem: pair.privateKeyPem, githubOverrides: { copyPending: 3 } });
+  await exercise(t);
+  assert.equal(t.looks.length, 4, 'looks until the files appear');
+  assert.equal(t.sleeps.length, 3, 'pauses between looks');
+  // Every look happened when the only thing done so far was asking GitHub to create the repository.
+  assert.deepEqual(t.looks, [1, 1, 1, 1], `nothing else is written until the copy is done: ${JSON.stringify(t.calls)}`);
+  assert.ok(['topics', 'invite', 'badge'].every(n => t.calls.some(c => c[0] === n)), 'and then it does all of it');
+  assert.equal(failedLines(t).length, 0);
+});
+
+test('gives up with a clear message if GitHub never finishes the copy, and invites nobody', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { codespaces_badge: true } }), privateKeyPem: pair.privateKeyPem, githubOverrides: { copyPending: 1000 } });
+  await exercise(t);
+  assert.deepEqual(results(t).map(r => [r.status, /still copying/.test(r.error)]), [['failed', true]]);
+  assert.equal(t.calls.filter(c => ['topics', 'invite', 'badge'].includes(c[0])).length, 0);
+});

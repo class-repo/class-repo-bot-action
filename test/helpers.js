@@ -38,6 +38,9 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
   const calls = [];
   // Repositories that exist on "GitHub": name -> what repos.get returns. Pass `existing` to pre-seed some.
   const repos = new Map(Object.entries(existing));
+  let pendingCopy = githubOverrides.copyPending || 0;
+  const sleeps = [];
+  const looks = [];
   const notFound = () => { const e = new Error('nf'); e.status = 404; return e; };
   const github = strict('github', { rest: strict('rest', {
     repos: strict('repos', {
@@ -67,7 +70,13 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
         if (githubOverrides.update) await githubOverrides.update(a);
         repos.get(a.repo).archived = a.archived;
       },
-      getContent: async () => { throw notFound(); },
+      getContent: async ({ path: filePath }) => {
+        if (filePath !== '') throw notFound();
+        // The root listing is how the bot knows GitHub has finished copying a template. `copyPending` = how many looks come back empty.
+        looks.push(calls.length); // how many writes had happened when the bot looked
+        if (pendingCopy > 0) { pendingCopy--; throw notFound(); }
+        return { data: [{ name: 'README.md' }] };
+      },
       createOrUpdateFileContents: async a => { calls.push(['badge', a.repo]); },
       createInOrg: async () => ({ data: { private: true } }),
     }),
@@ -98,13 +107,13 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
   };
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prov-'));
   const exec = [];
-  const deps = { fetch, tmpDir, execFile: execFile || ((cmd, args, opts) => { exec.push({ cmd, args, opts }); if (args[0] === 'clone') fs.mkdirSync(args[args.length - 1], { recursive: true }); }) };
+  const deps = { fetch, tmpDir, sleep: async ms => { sleeps.push(ms); }, execFile: execFile || ((cmd, args, opts) => { exec.push({ cmd, args, opts }); if (args[0] === 'clone') fs.mkdirSync(args[args.length - 1], { recursive: true }); }) };
   const env = {
     BATCH_ID: BATCH, SERVER_URL: 'https://api.classrepo.org/', EXECUTOR_TOKEN: 'ghs_executor', ROSTER_PRIVATE_KEY: privateKeyPem,
     TRACKING_REPO: 'class-repo-tracking', RUNNER_TEMP: tmpDir,
   };
   const context = { repo: { owner: 'cs101-org', repo: 'class-repo-bot' } };
-  return { logs, secrets, core, github, deps, env, context, calls, requests, exec, tmpDir, repos };
+  return { logs, secrets, core, github, deps, env, context, calls, requests, exec, tmpDir, repos, sleeps, looks };
 }
 
 module.exports = { seal, setup, strict, SENSITIVE, BATCH, TEMPLATE };

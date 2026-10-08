@@ -26,6 +26,8 @@ const { version: BOT_VERSION } = require('../package.json');
 
 // Job format version. A newer server keeps sending protocol 2 jobs to bots that list 2, so bots can lag safely.
 const PROTOCOL = 2;
+const COPY_WAIT_ATTEMPTS = 30; // GitHub usually takes a few seconds; give up after about a minute
+const COPY_WAIT_MS = 2000;
 const MAX_REPOS = 200;
 const MAX_COLLABORATORS = 10;
 const ALLOWED_PERMISSIONS = ['pull', 'push'];
@@ -57,6 +59,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
   const fetchFn = deps.fetch || fetch;
   const execFile = deps.execFile || childProcess.execFileSync;
   const tmp = deps.tmpDir || env.RUNNER_TEMP || os.tmpdir();
+  const sleep = deps.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
 
   const serverUrl = String(env.SERVER_URL || '').replace(/\/+$/, '');
   const batchId = String(env.BATCH_ID || '');
@@ -206,6 +209,19 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       }
     }
 
+    // GitHub copies a template in the background: the repository exists straight away but is empty for a few seconds.
+    // Inviting people or writing files into it before the copy finishes can collide with the copy, so wait for the files.
+    async function waitForTemplateCopy(repoName) {
+      for (let attempt = 0; attempt < COPY_WAIT_ATTEMPTS; attempt++) {
+        try {
+          const root = await github.rest.repos.getContent({ owner, repo: repoName, path: '' });
+          if (Array.isArray(root.data) && root.data.length > 0) return;
+        } catch { /* not there yet */ }
+        await sleep(COPY_WAIT_MS);
+      }
+      throw new Error('GitHub is still copying the template into the repository. Please try again in a minute.');
+    }
+
     // Throws an Error with a short message that is safe to show to the student and to log.
     async function ensureRepo(spec, people) {
       const settings = spec.settings || {};
@@ -224,6 +240,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
         } catch (e) {
           throw new Error(`Could not create the repository from the template (HTTP ${e.status || 'error'}).`);
         }
+        await waitForTemplateCopy(repoName);
         await mark(repoName);
         existing = { archived: false };
       } else {
@@ -234,6 +251,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
         if (!topics.includes(MARKER_TOPIC) && !generatedFromTemplate) {
           throw new Error('A repository with that name already exists and was not created by ClassRepo, so it was left alone.');
         }
+        await waitForTemplateCopy(repoName); // a retry may find a repository GitHub has not finished filling
         if (!topics.includes(MARKER_TOPIC)) await mark(repoName, topics);
       }
 
