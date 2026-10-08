@@ -503,7 +503,7 @@ test('a snapshot never takes over a repository that merely has the same name', a
   const t = snapshotRun(snapshotJob(), {}, { [SNAPSHOT]: { topics: ['mine'], archived: false } });
   await exercise(t);
   assert.deepEqual(t.calls, []);
-  assert.deepEqual(results(t).map(r => r.status), ['failed']);
+  assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'name_taken' }]);
 });
 
 test('a snapshot only ever uses the reserved name, and refuses anything extra', async () => {
@@ -511,7 +511,7 @@ test('a snapshot only ever uses the reserved name, and refuses anything extra', 
     const t = snapshotRun(snapshotJob(extra));
     await exercise(t);
     assert.deepEqual(t.calls, [], JSON.stringify(extra));
-    assert.deepEqual(results(t).map(r => r.status), ['failed']);
+    assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'invalid_job' }]);
   }
 });
 
@@ -520,7 +520,7 @@ test('the optional allow-list of template owners applies to what a snapshot is c
   blocked.env.ALLOWED_TEMPLATE_OWNERS = 'someone-else, another';
   await exercise(blocked);
   assert.deepEqual(blocked.calls, []);
-  assert.deepEqual(results(blocked).map(r => r.status), ['failed']);
+  assert.deepEqual(results(blocked), [{ index: 0, status: 'failed', code: 'owner_not_allowed' }]);
   const ok = snapshotRun(snapshotJob());
   ok.env.ALLOWED_TEMPLATE_OWNERS = 'CS101';
   await exercise(ok);
@@ -531,7 +531,7 @@ test('a snapshot reports failure, and does not mark anything as a template, if G
   const t = snapshotRun(snapshotJob(), { create: () => { const e = new Error('x'); e.status = 404; throw e; } });
   await exercise(t);
   assert.ok(!t.calls.some(c => c[0] === 'template'));
-  assert.match(results(t)[0].error, /Could not copy the template \(HTTP 404\)/);
+  assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'copy_failed', http: 404 }]);
 });
 
 test('students\' repositories are only generated from a snapshot this bot made in the target account', async () => {
@@ -588,4 +588,54 @@ test('a repository with the snapshot\'s name but without ClassRepo\'s snapshot l
   await exercise(t);
   assert.deepEqual(githubWrites(t), []);
   assert.deepEqual(results(t).map(r => r.status), ['failed']);
+});
+
+test('a snapshot that GitHub never finishes copying is reported as a timeout, with only a code', async () => {
+  const t = snapshotRun(snapshotJob(), { copyPending: 1000 });
+  await exercise(t);
+  assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'copy_timeout' }]);
+  assert.ok(!t.calls.some(c => c[0] === 'template'));
+});
+
+test('nothing but a code from the fixed list and a status number ever travels back about a snapshot failure', async () => {
+  const t = snapshotRun(snapshotJob(), { create: () => { const e = new Error('Resource not accessible: cs101/starter is private for cs101-org'); e.status = 403; throw e; } });
+  await exercise(t);
+  const [report] = results(t);
+  assert.deepEqual(Object.keys(report).sort(), ['code', 'http', 'index', 'status']);
+  assert.ok(!JSON.stringify(report).includes('cs101'));
+});
+
+// ------------------------------------------------------------------------------------------ the roster repository
+
+const trackingCalls = t => t.calls.filter(c => c[1] === 'class-repo-tracking');
+
+test('creates a missing roster repository from the fixed template, private, with Actions off before anything is written', async () => {
+  const pair = generateRosterKeyPair();
+  let created;
+  const t = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem, githubOverrides: { noTracking: true, create: a => { if (a.name === 'class-repo-tracking') created = a; } } });
+  const order = [];
+  t.deps.execFile = (cmd, args, opts) => { order.push(`git ${args[0]}`); if (args[0] === 'clone') fs.mkdirSync(args[args.length - 1], { recursive: true }); };
+  const originalActions = t.github.rest.actions.setGithubActionsPermissionsRepository;
+  t.github.rest.actions.setGithubActionsPermissionsRepository = async a => { if (a.repo === 'class-repo-tracking') order.push('actions off'); return originalActions(a); };
+  await exercise(t);
+  assert.deepEqual([created.template_owner, created.template_repo, created.owner, created.private], ['class-repo', 'class-repo-tracking-template', 'cs101-org', true]);
+  assert.deepEqual(trackingCalls(t), [['create', 'class-repo-tracking', true], ['actions', 'class-repo-tracking', false], ['topics', 'class-repo-tracking', ['classrepo']]]);
+  assert.ok(order.indexOf('actions off') < order.indexOf('git clone'), order.join());
+  assert.ok(order.includes('git push'), 'and then the roster is written');
+});
+
+test('does not write the roster if Actions cannot be turned off on a roster repository it just made', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem, githubOverrides: { noTracking: true, actions: a => { if (a.repo === 'class-repo-tracking') throw new Error('no'); } } });
+  await exercise(t);
+  assert.equal(t.exec.length, 0);
+  assert.ok(t.logs.some(l => l.includes('Could not create the tracking repository')));
+});
+
+test('uses a roster repository the educator already made as it is, without changing it', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem });
+  await exercise(t);
+  assert.deepEqual(trackingCalls(t), []);
+  assert.ok(t.exec.some(e => e.args[0] === 'push'));
 });

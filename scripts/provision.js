@@ -32,6 +32,8 @@ const MAX_REPOS = 200;
 const MAX_COLLABORATORS = 10;
 const ALLOWED_PERMISSIONS = ['pull', 'push'];
 const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'archived', 'instructions_url'];
+// Where the roster repository comes from when the educator has none yet. Fixed here, never taken from a job.
+const TRACKING_TEMPLATE = { owner: 'class-repo', repo: 'class-repo-tracking-template' };
 const SUPPORTED_SNAPSHOT_FIELDS = ['protocol', 'mode', 'template', 'assignment_name', 'target_owner', 'shortcode'];
 const SNAPSHOT_TOPIC = 'classrepo-snapshot';
 const SNAPSHOT_RE = /^classrepo-snapshot-[A-Za-z0-9]{1,32}$/;
@@ -160,7 +162,9 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       } catch { /* not there yet */ }
       await sleep(COPY_WAIT_MS);
     }
-    throw new Error('GitHub is still copying the template into the repository. Please try again in a minute.');
+    const timeout = new Error('GitHub is still copying the template into the repository. Please try again in a minute.');
+    timeout.code = 'copy_timeout';
+    throw timeout;
   }
 
   // Labels a repository as ClassRepo's. Best effort: a repository generated from this template is recognised anyway.
@@ -172,9 +176,10 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     }
   }
 
-  // Tells the server the one result of a job that is not about students (a snapshot).
-  async function reportOne(status, error) {
-    try { await call('results', { results: [{ index: 0, status, error }] }); } catch { core.warning('Could not send a status report to the server.'); }
+  // Tells the server the one result of a job that is not about students (a snapshot). A failure is a short code from a fixed
+  // list (plus GitHub's HTTP status): the server owns the wording shown to the educator, so no free text travels back.
+  async function reportOne(status, problem) {
+    try { await call('results', { results: [{ index: 0, status, ...(problem || {}) }] }); } catch { core.warning('Could not send a status report to the server.'); }
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -185,14 +190,14 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
   async function snapshot() {
     const { template, assignment_name: name } = job;
     const owner = job.target_owner || context.repo.owner;
-    const stop = async (message, log) => { await reportOne('failed', message); core.setFailed(log || message); };
+    const stop = async (code, http, log) => { await reportOne('failed', { code, ...(http ? { http } : {}) }); core.setFailed(log || `The snapshot failed (${code}${http ? `, HTTP ${http}` : ''}).`); };
 
     if (!TEMPLATE_RE.test(template || '') || !SNAPSHOT_RE.test(name || '') || !HANDLE_RE.test(owner) || Object.keys(job).some(k => !SUPPORTED_SNAPSHOT_FIELDS.includes(k))) {
-      return stop('The job contains invalid names.');
+      return stop('invalid_job');
     }
     const allowedOwners = String(env.ALLOWED_TEMPLATE_OWNERS || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
     if (allowedOwners.length && !allowedOwners.includes(template.split('/')[0].toLowerCase())) {
-      return stop('The template owner is not in the allowed list of your bot repository.', 'The template owner is not in this repository\'s allowed list (CLASSREPO_ALLOWED_TEMPLATE_OWNERS).');
+      return stop('owner_not_allowed', null, 'The template owner is not in this repository\'s allowed list (CLASSREPO_ALLOWED_TEMPLATE_OWNERS).');
     }
     const [templateOwner, templateRepo] = template.split('/');
 
@@ -200,28 +205,28 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     try {
       existing = (await github.rest.repos.get({ owner, repo: name })).data;
     } catch (e) {
-      if (e.status !== 404) return stop(`Could not check for an existing copy (HTTP ${e.status || 'error'}).`);
+      if (e.status !== 404) return stop('check_failed', e.status);
     }
     if (existing && !(existing.topics || []).includes(SNAPSHOT_TOPIC)) {
-      return stop('A repository with the snapshot name already exists and was not made by ClassRepo, so it was left alone.');
+      return stop('name_taken');
     }
     if (!existing) {
       try {
         await github.rest.repos.createUsingTemplate({ template_owner: templateOwner, template_repo: templateRepo, owner, name, private: true, include_all_branches: false });
       } catch (e) {
-        return stop(`Could not copy the template (HTTP ${e.status || 'error'}). Check that your Executor App can read it.`);
+        return stop('copy_failed', e.status);
       }
     }
     try {
       await waitForTemplateCopy(owner, name);
     } catch (e) {
-      return stop(e.message);
+      return stop(e.code || 'copy_failed');
     }
     await markTopics(owner, name, [MARKER_TOPIC, SNAPSHOT_TOPIC]);
     try {
       await github.rest.repos.update({ owner, repo: name, is_template: true });
     } catch (e) {
-      return stop(`Could not make the copy a template (HTTP ${e.status || 'error'}).`);
+      return stop('template_failed', e.status);
     }
     core.info('snapshot: done');
     await reportOne('ready');
@@ -428,10 +433,15 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       repo = (await github.rest.repos.get({ owner, repo: trackingRepo })).data;
     } catch (e) {
       if (e.status !== 404) return core.warning('Could not check the tracking repository; roster not recorded.');
+      // Generating from a template works in a personal account as well as an organization (an app cannot create an EMPTY
+      // repository in a personal account). The roster is the most sensitive thing written anywhere, so nothing may run in
+      // this repository: Actions is turned off before anything is written to it.
       try {
-        const type = (await github.rest.users.getByUsername({ username: owner })).data.type;
-        if (type !== 'Organization') return core.warning('The tracking repository does not exist. Create a private repository with that name; roster not recorded.');
-        repo = (await github.rest.repos.createInOrg({ org: owner, name: trackingRepo, private: true, description: 'ClassRepo student tracking logs' })).data;
+        await github.rest.repos.createUsingTemplate({ template_owner: TRACKING_TEMPLATE.owner, template_repo: TRACKING_TEMPLATE.repo, owner, name: trackingRepo, private: true, description: 'ClassRepo roster', include_all_branches: false });
+        await github.rest.actions.setGithubActionsPermissionsRepository({ owner, repo: trackingRepo, enabled: false });
+        await waitForTemplateCopy(owner, trackingRepo);
+        await markTopics(owner, trackingRepo, [MARKER_TOPIC]);
+        repo = (await github.rest.repos.get({ owner, repo: trackingRepo })).data;
       } catch {
         return core.warning('Could not create the tracking repository; roster not recorded.');
       }

@@ -48,7 +48,7 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
   const github = strict('github', { rest: strict('rest', {
     repos: strict('repos', {
       get: async ({ repo }) => {
-        if (repo === 'class-repo-tracking') return { data: { private: true } };
+        if (repo === 'class-repo-tracking' && !(githubOverrides.noTracking && !repos.has(repo))) return { data: { private: true } };
         if (repo === SNAPSHOT && !repos.has(repo) && !githubOverrides.noSnapshot && !githubOverrides.creatingSnapshot) return { data: { topics: githubOverrides.snapshotTopics || ['classrepo', 'classrepo-snapshot'] } };
         if (!repos.has(repo)) throw notFound();
         return { data: repos.get(repo) };
@@ -88,11 +88,8 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, e
         return { data: [{ name: 'README.md' }] };
       },
       createOrUpdateFileContents: async a => { calls.push(['badge', a.repo]); readmes[a.repo] = Buffer.from(a.content, 'base64').toString('utf8'); },
-      createInOrg: async () => ({ data: { private: true } }),
     }),
-    users: strict('users', {
-      getByUsername: async () => ({ data: { type: 'Organization' } }),
-    }),
+    users: strict('users', {}),
     actions: strict('actions', {
       setGithubActionsPermissionsRepository: async a => {
         calls.push(['actions', a.repo, a.enabled]);
