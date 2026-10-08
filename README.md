@@ -6,7 +6,7 @@ repository (made from the [`class-repo-bot`](https://github.com/class-repo/class
 *uses this action, pinned to an exact commit*, and GitHub proposes updates to you as pull requests.
 
 ```yaml
-- uses: class-repo/class-repo-bot-action@<exact commit>   # v4.1.0
+- uses: class-repo/class-repo-bot-action@<exact commit>   # v4.2.0
   with:
     batch-id: ${{ inputs.batch_id }}
     server-url: ${{ inputs.server_url }}
@@ -28,6 +28,7 @@ Executor App's key. It enforces these rules whatever the server asks:
   the bot ever marks as a template. Your allow-list of template owners, if you set one, applies to what the snapshot is copied *from*.
 * Students get **at most push access** (or read-only). Never admin, maintain or triage.
 * It **never deletes** anything and **never changes a repository's visibility**.
+* It **checks that what it just made is really private**. If GitHub returns a public repository (an organization that only lets members and apps create public ones), the bot stops: a public snapshot is not used, and nobody is invited into a public student repository. To fix it, in the organization's *Member privileges*, let members and GitHub Apps create private repositories; then make the public repository private or delete it.
 * It **only touches repositories ClassRepo created**: ones with the `classrepo` topic, or generated from the assignment's snapshot. A repository that merely
   has a matching name is left alone.
 * A job that asks for anything this version does not understand is **refused whole**, with an "update your bot" message, rather than half done.

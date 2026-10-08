@@ -62,6 +62,9 @@ const ROSTER_SECRET = 'CLASSREPO_ROSTER_PRIVATE_KEY';
 const oneLine = (value, max = 200) => String(value == null ? '' : value).replace(/[\r\n\u2028\u2029]+/g, ' ').trim().slice(0, max);
 const mdCell = value => oneLine(value).replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\[/g, '\\[').replace(/\]/g, '\\]');
 
+// What GitHub said about a refusal, for the run log. Every job value and student detail is already masked as a secret, so this cannot print one.
+const whatGitHubSaid = e => oneLine(e && e.message, 300) || 'no reason given';
+
 async function run({ github, context, core, env = process.env, deps = {} }) {
   const fetchFn = deps.fetch || fetch;
   const execFile = deps.execFile || childProcess.execFileSync;
@@ -295,11 +298,16 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     if (existing && !(existing.topics || []).includes(SNAPSHOT_TOPIC)) {
       return stop('name_taken');
     }
+    // The snapshot holds the educator's starter, so it must be private. An organization that only lets GitHub Apps create PUBLIC
+    // repositories can end up with a public copy even though private was asked for: stop before anything else is done to it.
+    const publicNotice = 'GitHub made the snapshot a public repository although private was requested (the organization may only allow public repositories for members and apps). Nothing was shared. Allow private repositories, then make this one private or delete it.';
+    if (existing && existing.private !== true) return stop('snapshot_public', null, publicNotice);
     if (!existing) {
       try {
-        await github.rest.repos.createUsingTemplate({ template_owner: templateOwner, template_repo: templateRepo, owner, name, private: true, include_all_branches: false });
+        const made = (await github.rest.repos.createUsingTemplate({ template_owner: templateOwner, template_repo: templateRepo, owner, name, private: true, include_all_branches: false })).data;
+        if (!made || made.private !== true) return stop('snapshot_public', null, publicNotice);
       } catch (e) {
-        return stop('copy_failed', e.status);
+        return stop('copy_failed', e.status, `GitHub refused to copy the template (HTTP ${e.status || 'error'}): ${whatGitHubSaid(e)}`);
       }
     }
     try {
@@ -388,6 +396,13 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     const mark = (repoName, existingTopics = []) => markTopics(owner, repoName, [...existingTopics, MARKER_TOPIC]);
     const waitForCopy = repoName => waitForTemplateCopy(owner, repoName);
 
+    // A student's repository must be private. If it is not (an organization that only allows public repositories for apps), nobody is invited.
+    const notPrivate = () => {
+      const error = new Error("Your instructor's GitHub settings do not allow private repositories, so this could not be done. Please let them know.");
+      error.log = 'The repository is not private, so no one was invited. The organization may only allow public repositories for members and apps.';
+      return error;
+    };
+
     // Throws an Error with a short message that is safe to show to the student and to log.
     async function ensureRepo(spec, people) {
       const settings = spec.settings || {};
@@ -401,16 +416,21 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       }
 
       if (!existing) {
+        let made;
         try {
-          await github.rest.repos.createUsingTemplate({ template_owner: templateOwner, template_repo: templateRepo, owner, name: repoName, private: true, include_all_branches: false });
+          made = (await github.rest.repos.createUsingTemplate({ template_owner: templateOwner, template_repo: templateRepo, owner, name: repoName, private: true, include_all_branches: false })).data;
         } catch (e) {
-          throw new Error(`Could not create the repository from the template (HTTP ${e.status || 'error'}).`);
+          const error = new Error(`Could not create the repository from the template (HTTP ${e.status || 'error'}).`);
+          error.log = `GitHub refused to create the repository (HTTP ${e.status || 'error'}): ${whatGitHubSaid(e)}`;
+          throw error;
         }
+        if (!made || made.private !== true) throw notPrivate();
         await waitForCopy(repoName);
         await mark(repoName);
         existing = { archived: false };
       } else {
         // A repository that only has a matching NAME is not ours to change, however the name came about.
+        if (existing.private === false) throw notPrivate(); // never invite a student into a public repository
         const topics = existing.topics || [];
         const generatedFromTemplate = !!existing.template_repository
           && String(existing.template_repository.full_name).toLowerCase() === template.toLowerCase();

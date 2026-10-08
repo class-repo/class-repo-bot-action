@@ -493,7 +493,7 @@ test('a snapshot copies the starter into a private repository, labels it as Clas
 });
 
 test('running a snapshot twice reuses the copy and does not copy again', async () => {
-  const t = snapshotRun(snapshotJob(), {}, { [SNAPSHOT]: { topics: ['classrepo', 'classrepo-snapshot'], archived: false } });
+  const t = snapshotRun(snapshotJob(), {}, { [SNAPSHOT]: { topics: ['classrepo', 'classrepo-snapshot'], archived: false, private: true } });
   await exercise(t);
   assert.equal(t.calls.filter(c => c[0] === 'create').length, 0);
   assert.deepEqual(results(t), [{ index: 0, status: 'ready' }]);
@@ -763,4 +763,48 @@ test('a roster repository name other than the default is used for the setup chec
   await exercise(t);
   assert.deepEqual(t.calls.filter(c => c[1] === 'my-roster').map(c => c[0]), ['create', 'actions', 'topics']);
   assert.equal(results(t)[0].roster, 'created');
+});
+
+// ------------------------------------------------------------------------------------------- never public
+
+test('a snapshot that GitHub made public is not used: nothing more is done to it and the educator is told', async () => {
+  const t = snapshotRun(snapshotJob(), { createPublic: true });
+  await exercise(t);
+  assert.deepEqual(t.calls.map(c => c[0]), ['create'], 'no labelling, no marking as a template');
+  assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'snapshot_public' }]);
+  assert.match(failedLines(t)[0], /public repository/);
+});
+
+test('an existing snapshot that is public is not reused', async () => {
+  const t = snapshotRun(snapshotJob(), {}, { [SNAPSHOT]: { topics: ['classrepo', 'classrepo-snapshot'], archived: false, private: false } });
+  await exercise(t);
+  assert.deepEqual(t.calls, []);
+  assert.deepEqual(results(t), [{ index: 0, status: 'failed', code: 'snapshot_public' }]);
+});
+
+test('a student repository GitHub made public is not shared: nobody is invited and nothing is written to it', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { codespaces_badge: true } }), privateKeyPem: pair.privateKeyPem, githubOverrides: { createPublic: true } });
+  await exercise(t);
+  assert.deepEqual(t.calls.filter(c => ['invite', 'badge', 'topics', 'actions'].includes(c[0])), []);
+  assert.match(results(t)[0].error, /do not allow private repositories/);
+  assert.ok(failedLines(t).concat(t.logs).some(l => /not private, so no one was invited/.test(l)));
+  assert.ok(!t.logs.some(l => SENSITIVE.some(x => l.includes(x))), 'and still nothing identifying in the log');
+});
+
+test('an existing public student repository is not invited into either', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem, existing: { 'lab1-alice-gh': { topics: ['classrepo'], archived: false, private: false } } });
+  await exercise(t);
+  assert.deepEqual(t.calls.filter(c => c[0] === 'invite'), []);
+  assert.deepEqual(results(t).map(r => r.status), ['failed']);
+});
+
+test('when GitHub refuses to create a repository the run log says what GitHub said (the student sees only the generic message)', async () => {
+  const pair = generateRosterKeyPair();
+  const refuse = () => { const e = new Error('Validation Failed: Visibility can\'t be private'); e.status = 422; throw e; };
+  const t = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem, githubOverrides: { create: refuse } });
+  await exercise(t);
+  assert.ok(t.logs.some(l => l.includes('HTTP 422') && l.includes('Visibility can\'t be private')), t.logs.join('\n'));
+  assert.equal(results(t)[0].error, 'Could not create the repository from the template (HTTP 422).');
 });

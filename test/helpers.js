@@ -57,7 +57,7 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, r
         calls.push(['create', a.name, a.private]);
         if (githubOverrides.create) await githubOverrides.create(a);
         repos.set(a.name, { topics: [], archived: false, private: true, template_repository: { full_name: `${a.template_owner}/${a.template_repo}` } });
-        return { data: {} };
+        return { data: { private: !githubOverrides.createPublic } };
       },
       replaceAllTopics: async a => {
         calls.push(['topics', a.repo, a.names]);
