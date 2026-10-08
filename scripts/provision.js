@@ -431,6 +431,13 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       } else {
         // A repository that only has a matching NAME is not ours to change, however the name came about.
         if (existing.private === false) throw notPrivate(); // never invite a student into a public repository
+        // A repository of this name that was made from a DIFFERENT snapshot belongs to an earlier assignment (one with the same name, since
+        // deleted). Reusing it would hand the student the wrong assignment, so it is left alone.
+        if (existing.template_repository && String(existing.template_repository.full_name).toLowerCase() !== template.toLowerCase()) {
+          const error = new Error('A repository with that name was made for an earlier assignment, so it was left alone. Please let your instructor know.');
+          error.log = 'A repository of this name exists but was made from a different snapshot, so it was left alone.';
+          throw error;
+        }
         const topics = existing.topics || [];
         const generatedFromTemplate = !!existing.template_repository
           && String(existing.template_repository.full_name).toLowerCase() === template.toLowerCase();

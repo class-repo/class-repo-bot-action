@@ -808,3 +808,14 @@ test('when GitHub refuses to create a repository the run log says what GitHub sa
   assert.ok(t.logs.some(l => l.includes('HTTP 422') && l.includes('Visibility can\'t be private')), t.logs.join('\n'));
   assert.equal(results(t)[0].error, 'Could not create the repository from the template (HTTP 422).');
 });
+
+test('a repository of the same name made for an earlier assignment (another snapshot) is left alone, even though ClassRepo made it', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem,
+    existing: { 'lab1-alice-gh': { topics: ['classrepo'], archived: false, private: true, template_repository: { full_name: 'cs101-org/classrepo-snapshot-oldone' } } } });
+  await exercise(t);
+  assert.deepEqual(t.calls.filter(c => ['invite', 'topics', 'badge', 'create'].includes(c[0])), []);
+  assert.match(results(t)[0].error, /earlier assignment/);
+  assert.ok(!t.logs.some(l => SENSITIVE.some(x => l.includes(x))));
+});
+
