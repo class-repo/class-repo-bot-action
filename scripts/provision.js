@@ -31,13 +31,17 @@ const COPY_WAIT_MS = 2000;
 const MAX_REPOS = 200;
 const MAX_COLLABORATORS = 10;
 const ALLOWED_PERMISSIONS = ['pull', 'push'];
-const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'archived', 'instructions_url'];
+const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'pypad_badge', 'pypad_file', 'archived', 'instructions_url'];
+// Where "Open in PyPad" goes. Fixed here, never taken from a job, so a job can only choose which file in the student's own repository to open.
+const PYPAD_BASE = 'https://pypad.dev/v0.4.0-rc.5/'; // the release to open (moves to /v1/ once 0.4.0 is released)
 // Where the roster repository comes from when the educator has none yet. Fixed here, never taken from a job.
 const TRACKING_TEMPLATE = { owner: 'class-repo', repo: 'class-repo-tracking-template' };
 const SUPPORTED_SNAPSHOT_FIELDS = ['protocol', 'mode', 'template', 'assignment_name', 'target_owner', 'shortcode'];
 const SNAPSHOT_TOPIC = 'classrepo-snapshot';
 const SNAPSHOT_RE = /^classrepo-snapshot-[A-Za-z0-9]{1,32}$/;
 // https only, and none of the characters that could break out of a Markdown link or an HTML attribute.
+// A notebook or script inside the repository: a relative path, no `..`, nothing that could change the address.
+const PYPAD_FILE_RE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+){0,5}$/;
 const INSTRUCTIONS_RE = /^https:\/\/[A-Za-z0-9._~:/?#@!$&*+,;=%-]{1,300}$/;
 const SUPPORTED_REPO_FIELDS = ['sync_key', 'collaborators', 'settings'];
 const MARKER_TOPIC = 'classrepo';
@@ -130,7 +134,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       if (people.some(p => !p || typeof p.sealed !== 'string' || !ALLOWED_PERMISSIONS.includes(p.permission))) {
         return { message: `The job asks for a permission this bot never grants (it grants only: ${ALLOWED_PERMISSIONS.join(', ')}).`, student: 'This could not be done.' };
       }
-      const settingsOk = Object.entries(spec.settings || {}).every(([k, v]) => (k === 'instructions_url' ? typeof v === 'string' && INSTRUCTIONS_RE.test(v) : typeof v === 'boolean'));
+      const settingsOk = Object.entries(spec.settings || {}).every(([k, v]) => (k === 'instructions_url' ? typeof v === 'string' && INSTRUCTIONS_RE.test(v) : k === 'pypad_file' ? typeof v === 'string' && v.length <= 120 && PYPAD_FILE_RE.test(v) && !v.split('/').some(part => part === '.' || part === '..') : typeof v === 'boolean'));
       if (!settingsOk) return { message: 'A repository setting has an invalid value.', student: 'This could not be done.' };
     }
     return null;
@@ -462,7 +466,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
         }
       }
       if (settings.actions_enabled !== undefined) await setActions(repoName, settings.actions_enabled); // best effort
-      await addReadmeNotes(repoName, { instructionsUrl: settings.instructions_url, badge: settings.codespaces_badge === true }); // best effort
+      await addReadmeNotes(repoName, { instructionsUrl: settings.instructions_url, badge: settings.codespaces_badge === true, pypad: settings.pypad_badge === true, pypadFile: settings.pypad_file }); // best effort
       writeRoster(people, repoName);
       if (settings.archived === true) {
         try { await github.rest.repos.update({ owner, repo: repoName, archived: true }); } catch (e) { throw new Error(`Could not archive the repository (HTTP ${e.status || 'error'}).`); }
@@ -487,11 +491,15 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       }
     }
 
-    // Puts the instructions link and the Codespaces badge at the top of the README, once each (so re-running is harmless).
-    async function addReadmeNotes(repoName, { instructionsUrl, badge }) {
+    // Puts the instructions link and the Codespaces and PyPad badges at the top of the README, once each (so re-running is harmless).
+    async function addReadmeNotes(repoName, { instructionsUrl, badge, pypad, pypadFile }) {
       const notes = [];
       if (instructionsUrl) notes.push({ key: instructionsUrl, text: `**[Assignment instructions](${instructionsUrl})**` });
       if (badge) notes.push({ key: 'codespaces.new', text: `[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/${owner}/${repoName}?quickstart=1)` });
+      if (pypad) {
+        const target = `${PYPAD_BASE}#gh=${owner}/${repoName}${pypadFile ? `/${pypadFile}` : ''}`;
+        notes.push({ key: 'pypad.dev/', text: `[![Open in PyPad](https://img.shields.io/badge/Open_in-PyPad-334155)](${target})\n\n**Open in PyPad** runs the notebook in your browser and saves your work back to this repository. The first time, click *Sign in with GitHub* and approve *PyPad for GitHub*. Nothing to install.` });
+      }
       if (notes.length === 0) return;
       try {
         const readme = await github.rest.repos.getContent({ owner, repo: repoName, path: 'README.md' }).catch(() => null);

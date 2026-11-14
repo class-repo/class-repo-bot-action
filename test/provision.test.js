@@ -206,6 +206,38 @@ test('adds the Codespaces badge only when asked', async () => {
   assert.deepEqual(off.calls.filter(c => c[0] === 'badge'), []);
 });
 
+test('adds the PyPad badge, opening the notebook asked for, only when asked, and only once', async () => {
+  const pair = generateRosterKeyPair();
+  const on = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true, pypad_file: 'notebooks/week1.ipynb' } }), privateKeyPem: pair.privateKeyPem });
+  await exercise(on);
+  const readme = on.readmes['lab1-alice-gh'];
+  assert.match(readme, /^\[!\[Open in PyPad\]\(https:\/\/img\.shields\.io\/badge\/Open_in-PyPad-334155\)\]\(https:\/\/pypad\.dev\/v[^/]+\/#gh=[^/]+\/lab1-alice-gh\/notebooks\/week1\.ipynb\)/);
+  assert.match(readme, /Sign in with GitHub/);
+  const plain = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true } }), privateKeyPem: pair.privateKeyPem });
+  await exercise(plain);
+  assert.match(plain.readmes['lab1-alice-gh'], /#gh=[^/]+\/lab1-alice-gh\)/); // no file: PyPad lists the repository's notebooks
+  const off = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem });
+  await exercise(off);
+  assert.deepEqual(off.calls.filter(c => c[0] === 'badge'), []);
+});
+
+test('the PyPad badge sits beside the Codespaces one, under the instructions link', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { instructions_url: 'https://example.edu/lab1', codespaces_badge: true, pypad_badge: true } }), privateKeyPem: pair.privateKeyPem });
+  await exercise(t);
+  const readme = t.readmes['lab1-alice-gh'];
+  assert.ok(readme.indexOf('Assignment instructions') < readme.indexOf('Open in GitHub Codespaces') && readme.indexOf('Open in GitHub Codespaces') < readme.indexOf('Open in PyPad'), readme);
+});
+
+test('a notebook path that could change the address refuses the whole job before anything is done', async () => {
+  const pair = generateRosterKeyPair();
+  for (const bad of ['../secret', '/etc/passwd', 'a/../b', 'a b.ipynb', 'x.ipynb?y=1', 'x.ipynb#z', 'a//b', 'https://evil.example/', 42, `${'a'.repeat(130)}.ipynb`]) {
+    const t = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true, pypad_file: bad } }), privateKeyPem: pair.privateKeyPem });
+    await exercise(t);
+    assert.deepEqual(t.calls, [], String(bad));
+  }
+});
+
 test('a failure to change a setting is a generic warning, not a failed student, and leaks nothing', async () => {
   const pair = generateRosterKeyPair();
   const t = setup({ job: oneRepo(pair, ALICE, { settings: { actions_enabled: false } }), privateKeyPem: pair.privateKeyPem,

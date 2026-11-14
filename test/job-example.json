@@ -1,6 +1,6 @@
 {
   "note": "Real protocol 3 jobs as the server produces them, with a TEST-ONLY roster key. Copied to class-repo-bot-action/test/job-example.json.",
-  "rosterPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDlsz1AQesQMpQ+\nPxtdjAf48kGkBtgNzXFkUGlXQKkFhkaYszOZ91hxo4WE/8PevkJw1hz9BThuOWUS\nfT66hbNrRU+yquxzYgofdqlp8sJgN8AVcQ3FZkQgwlEemlkmgCvxhZdPj4c7OVtx\nDHGe0qOK5hOzOmvEYflt3VlrlpYTg713OP0tTTrayr9RFDsRIoEf7UFfKgRd45wY\nIU3cP/xNubf+NYtknC7X9efOb5FbfI8x/LQck4KBOchnvuAQGblAb+1UqmfxMB85\nAhNcfGKiGF893IJhVtb83tBdq3+NbZeLVR0BD7nKxTslyHoCZ4gXkrUgOHMq6EnM\n1vScIMVbAgMBAAECggEACKFieZqnjhKFxCmhnzMfqch9TI5e1FgnsgckF+Ebrf6D\nu09g0lmF2XiKrD5UG75y3LyWwXbAP/uFFNS0pGJ1+l+pQYp2aY3d9Z0DJflv46bS\n0Q0zqFBZE4KwrXa9Djeo9iFVO1vfQLY9RJadDLZXsbm4ihogVQJy7q5vPvNV/olO\ndQUHG7ljSbQb6n7ez++GlSX///qeueV5xdavHHQm1Pdx3T9UmmzpGAcVpytEyx+S\nhYmCbWoIxHSz67Z7o04+aI6ds/k+V4WKWcVA6sTpzW1sPT2a4u6RqiqnYN2FQbYQ\nbxMWsX/3pi/ipG2XU68bVZJRC9sRkcKWLa0gEkxaLQKBgQD6O61AxDdK4/3ECLDi\n7PqE2/M2EOLiI9XKtbj91bO0OkQ24gr3HOMGTNN3Wt72rHs81LAr85vd9aDLNgTz\nK63fCuQeUslOsSmbAcE4+yvHnIaAzueJMNQ9c5dJb1SjcyHCAiSarDenRFV9t4Iw\nFXKzDJ1uuD3cnAIXJlmbkI5QZwKBgQDq/mwcoEv658tdDNPKNcKix9LPqVUIMZDR\ncy3WiPX+sCxlDe0VKcqvlPmpKRsYFM++oy7EZdehvr1O9Y7zpJ3yU5DsCeVXBIMx\nuQBP8Z4ItXiPNRUbsins+MhMmuyl1R190m4KH1Z6KUlvdbN4g2qoAIXdgX12rSXp\nP1rFdu867QKBgQCJDdyDx7SdISihkT0I3VENKccZCsCpqYT0RPnwlXaatPsdsErf\nNAQoNDXyfmP2aVwKYleniwMI2/rYslqdsYPG0RlGfoNhxWkLTDe/dNpytwl4TVrF\namgkzEXFY+PQrkOEFlZkHQVSaPwGIld87JJo/PTRarn/NbdzZH7Z1KAN6wKBgF92\nEXcjixoXFZ7sOhEX+8RixnnDgR59/CWJ06ImK0BWUwKOQLRrMMJZE36riy0iLy5z\nXek8sfcr4/1ydar2QY+ScPniHz9VPvJxA/Z14cwJ5DrQxo1kt/FjMwMjoGTRiVR2\nqmsERf4ETaewucKIKEitRbQxCUWvmwoAyaAT66UVAoGAXBi5tKCQRZ1PLDTqXdYG\n+dRKMMM/8sgTAB6iQOS0qxtWolTR6K0xisCAVfbSeZKa6zqwjPetH022S7r3knoo\nTzXYRRiJ4poYQHux1VB1aCVY1QRObnBETKZPTQcnQfMt3X0G+r8U7H6aL9dO2u/c\n+Sl8CWoYsMOwnEntdGm2H1o=\n-----END PRIVATE KEY-----\n",
+  "rosterPrivateKeyPem": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDcJbKMe+COHbbX\n0yQsc8JA79TOET+qQie8yW22mz98aZu0iffse6piLc064oFjEjBgTlA3wXgM55Ew\nBHWBGOpJBoKWLAYHIR9rVDJuNIXF/4Na4hx865gpG7R2Uk7Oj8TzG3HyhoZnU/y+\n52fN/z+G5eUSuu4j7O/sYhqDWYfPsCauebyZKmXUun45684VOcGKftv2sNwMpEWt\ndQTtY1PELviVN/VD++F4F/ExsOuTk3ePT8GTbefs682Oc/aMoqRxs+GLYhNcklqE\nbQMwoRKFuIQGgtrJD0NXHf3YghntKaNw946GwCYmrcb+60toO2AtfTT/gg8C9HuE\nGJ7m2TqzAgMBAAECggEAYmAeJ5T7xcYVfOCHW63m8mm56NPgZU7mvwAsHNvHROtU\nfxrgRTcF7pWVDmlFdGYeZAra4e98nBem05RKhgQCPdvA4yaNEwaEKcwYNRMXbGE/\n6477N/93oXcV74HcYYXxdsme48elq+rmGNEDnBQh6UA2W2ZZIIiytikou+V4QSAb\n9JWcdoag6UokmQkV2irG7+WVPAw+KBpHrDVgs1tnVANL6xBbSusAoZQXlmZT5C1T\nqxP4qvZC0bLrgI5w8BIZ4WX6AYlW9uH5vxpaucxD2yAXYao4gNW3kybshgIH9OWc\nrnPj+ljIwEwmCxKt2wJklQJGIEunP9Fqwgoi9DOpUQKBgQD2v/Lf1PNdZxuWv++w\nAqgoXtVmXrN0/UCqkzsR9J2NORDgE7rDe89yLgkUNY4PDIjQFpFkLP/sVTOqZuN6\n3I1TIQhp3kNgx6e5do2gwZuIK2AYV7h+nH1cuyllMu/BR2Y/DRl/DfrcWqFUSIcr\nfOLu82KyYTVX9Cnrq/4c1wm1hwKBgQDkZnHfuEg9qfZEOs4PZL/rAF6+4niRGmY/\naymPUEpS5myuatQ4cv64pFCxbloNTMvAqSgRXATuSeNqBEjg0jNWAT8ztSH63vcb\nNtnubyuaejMOONrzIOO3buFrp8368wX4XRRA0tFTBLzCOxitsJD3taWO4uLuTtMk\nEVWS152cdQKBgQCpLL+TcUiOAHRs7hmivp+WVjbPohw+GKiuipVUYTdoLPkB+OTy\nxD9dlGyLG5DTho+CxAZY/XVWDrCGo1ZR1Udb+GjxVP8zKpA3Wy4NStCdEsgmyHXo\n8NgOrQ/bn4m8JXzXu96AOxCE5ep4g+WRDmX02JARpw5QyEm5mEl4coLonwKBgQDE\nrd8ziqpSx3A00vqs0NJfWIM+FyFBupz/0ZUJP1exSZGfJIk5TvVAJOcD04YiW9Y9\nQq0pPbdVRzVZDvV+/COO1SYKrdjkAmqB+dry8rJ2pPIgNh99K/5L8GSXYvoCNpIW\njHirVZ9BwRuWmnMm5pv/Y2F8yK4oDqLNNUweViP4HQKBgQCiJBc/HQpk8BmDT0Rs\nvOSsVKw2KVkgmZz50zh720GvEB0F/I0DqtSMvl453Mmcl24Z6TbAtxbuVusEu3Dl\nJ1XnIuheiTbhQBTcHdTjBhiFg3V7bHU4XxfM4m/O/mWbFclJBGjLJqZMelnJ85aP\ndRKTruywzaFAGkz0mmvGNCQwiA==\n-----END PRIVATE KEY-----\n",
   "job": {
     "protocol": 4,
     "mode": "ensure_repos",
@@ -12,14 +12,16 @@
         "sync_key": "3f2b8c1e-5d4a-4b6f-9c1d-0a1b2c3d4e5f",
         "collaborators": [
           {
-            "sealed": "v1.fc4597d11fe159d7.bLbwD1Nwch7L6gg2h3MnqlMvnUbKs_F3Te9fkmRCh99vhlFeYEPKnBa4gLBELI6y6qtWfZMf3_zjSVRA3XultuzXaoJDCuqommCB1rPk8SUEt00CgFwxhMZCI0lm96uSr28HjuLo7RQZPvbHzZS6kaJ7iWcvdawCGVSZpeA_gjjWUV7QHgHUuSCCppqoqaMNt7G52iDHLawKv49oHWUXYYICgIlwnDCU89IvMVKYWk_bT0XxPQhU9zkizv1fZualBc5IawkRXlplOoXmN_2NM-qFByoZgV4uqcQSiZo898jVUZ7V_CK9jhuYhQ51avdntS3hBA-tOReGY-grSfF8Vg.jdKHiLguNqWZfsbg.XI0jtfM2ems46a3DoMHuco2jQMnVdTSfuX3tZ8AumfEBluJyEJmMh3_FU4X6og957pbFtRSUawyVMk-8yI8D-v3q1kWAzbuHShV2aEeid7f-Nn6dxGS4DXcuzpAXh7uX8Uk7BA",
+            "sealed": "v1.80e25ff7adf9491a.Ds0uTNDwIERoY7GzbjNpkoJz3lSd0D8CdcoNHlT8VizvejoH7omxBreYEHt78FPCAP5ObZwlyINQz3fbg9NyZhulgaIpOx5f24SCbZoBuXHDl-BnCPMSIBCrBwy8et8sSNUOTDwQyfuN9MHVve-TnXMBc5UQCG8P4teZZ9drBuuher8QMUm2wHh3GD0kTs9B1vmxv3wZnAyKJLsgU-WN01q01XGBIBMTEN9FyiNF60B_ObrIsF45K5CsF_VDLi9PZaZqYBco7zei7ZJWgvnDtvFiqx2poX-1gAGalUvTCpt1VrW17VgN6ZnPGCgTjvyfiOdKIzQSDYlwHrDSxmdYJw.Q9tlGlnJ9Xa5mUh_.FyAAMmcuEYvdNtuXa26cmvCCEBKqo9s6F_EWHCbXX21rNtoisczDpqziSdyfotMQoDYpCvHOgqLR9a8J1v89UFRfLpT9Q_R-u2lJT2qTDuXEdbC0kD6sgzdDZzbxp8DCxWG2FA",
             "permission": "push"
           }
         ],
         "settings": {
           "actions_enabled": false,
           "codespaces_badge": true,
-          "instructions_url": "https://example.edu/lab1"
+          "instructions_url": "https://example.edu/lab1",
+          "pypad_badge": true,
+          "pypad_file": "week1.ipynb"
         }
       }
     ],
@@ -29,8 +31,8 @@
     "protocol": 4,
     "mode": "snapshot",
     "template": "cs101/starter",
-    "assignment_name": "classrepo-snapshot-6z8ytfbkeoq5",
+    "assignment_name": "classrepo-snapshot-5m3hyup61r57",
     "target_owner": "myorg",
-    "shortcode": "6z8ytfbkeoq5"
+    "shortcode": "5m3hyup61r57"
   }
 }
