@@ -211,11 +211,11 @@ test('adds the PyPad badge, opening the notebook asked for, only when asked, and
   const on = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true, pypad_file: 'notebooks/week1.ipynb' } }), privateKeyPem: pair.privateKeyPem });
   await exercise(on);
   const readme = on.readmes['lab1-alice-gh'];
-  assert.match(readme, /^\[!\[Open in PyPad\]\(https:\/\/img\.shields\.io\/badge\/Open_in-PyPad-334155\)\]\(https:\/\/pypad\.dev\/v[^/]+\/#gh=[^/]+\/lab1-alice-gh\/notebooks\/week1\.ipynb\)/);
+  assert.match(readme, /^<a href="https:\/\/pypad\.dev\/v[^/]+\/#gh=[^/]+\/lab1-alice-gh\/notebooks\/week1\.ipynb"><picture><source media="\(prefers-color-scheme: dark\)" srcset="https:\/\/pypad\.dev\/badge-dark\.svg"><img src="https:\/\/pypad\.dev\/badge\.svg" alt="Open in PyPad"><\/picture><\/a>/);
   assert.match(readme, /Sign in with GitHub/);
   const plain = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true } }), privateKeyPem: pair.privateKeyPem });
   await exercise(plain);
-  assert.match(plain.readmes['lab1-alice-gh'], /#gh=[^/]+\/lab1-alice-gh\)/); // no file: PyPad lists the repository's notebooks
+  assert.match(plain.readmes['lab1-alice-gh'], /#gh=[^/]+\/lab1-alice-gh"/); // no file: PyPad lists the repository's notebooks
   const off = setup({ job: oneRepo(pair, ALICE), privateKeyPem: pair.privateKeyPem });
   await exercise(off);
   assert.deepEqual(off.calls.filter(c => c[0] === 'badge'), []);

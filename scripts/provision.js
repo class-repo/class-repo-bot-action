@@ -33,7 +33,11 @@ const MAX_COLLABORATORS = 10;
 const ALLOWED_PERMISSIONS = ['pull', 'push'];
 const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'pypad_badge', 'pypad_file', 'archived', 'instructions_url'];
 // Where "Open in PyPad" goes. Fixed here, never taken from a job, so a job can only choose which file in the student's own repository to open.
-const PYPAD_BASE = 'https://pypad.dev/v0.4.0-rc.5/'; // the release to open (moves to /v1/ once 0.4.0 is released)
+// The badge images are PyPad's own (stable addresses, not tied to a release): a dark pill that reads on both GitHub themes,
+// and a light-pill variant for the dark-theme <source>.
+const PYPAD_BADGE = 'https://pypad.dev/badge.svg';
+const PYPAD_BADGE_DARK = 'https://pypad.dev/badge-dark.svg';
+const PYPAD_BASE = 'https://pypad.dev/v0.4.0-rc.6/'; // the release to open (moves to /v1/ once 0.4.0 is released)
 // Where the roster repository comes from when the educator has none yet. Fixed here, never taken from a job.
 const TRACKING_TEMPLATE = { owner: 'class-repo', repo: 'class-repo-tracking-template' };
 const SUPPORTED_SNAPSHOT_FIELDS = ['protocol', 'mode', 'template', 'assignment_name', 'target_owner', 'shortcode'];
@@ -498,7 +502,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       if (badge) notes.push({ key: 'codespaces.new', text: `[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/${owner}/${repoName}?quickstart=1)` });
       if (pypad) {
         const target = `${PYPAD_BASE}#gh=${owner}/${repoName}${pypadFile ? `/${pypadFile}` : ''}`;
-        notes.push({ key: 'pypad.dev/', text: `[![Open in PyPad](https://img.shields.io/badge/Open_in-PyPad-334155)](${target})\n\n**Open in PyPad** runs the notebook in your browser and saves your work back to this repository. The first time, click *Sign in with GitHub* and approve *PyPad for GitHub*. Nothing to install.` });
+        notes.push({ key: 'pypad.dev/', text: `<a href="${target}"><picture><source media="(prefers-color-scheme: dark)" srcset="${PYPAD_BADGE_DARK}"><img src="${PYPAD_BADGE}" alt="Open in PyPad"></picture></a>\n\n**Open in PyPad** runs the notebook in your browser and saves your work back to this repository. The first time, click *Sign in with GitHub* and approve *PyPad for GitHub*. Nothing to install.` });
       }
       if (notes.length === 0) return;
       try {
