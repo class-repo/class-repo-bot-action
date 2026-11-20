@@ -31,13 +31,18 @@ const COPY_WAIT_MS = 2000;
 const MAX_REPOS = 200;
 const MAX_COLLABORATORS = 10;
 const ALLOWED_PERMISSIONS = ['pull', 'push'];
-const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'pypad_badge', 'pypad_file', 'archived', 'instructions_url'];
+const SUPPORTED_SETTINGS = ['actions_enabled', 'codespaces_badge', 'pypad_badge', 'pypad_file', 'pypad_version', 'archived', 'instructions_url'];
 // Where "Open in PyPad" goes. Fixed here, never taken from a job, so a job can only choose which file in the student's own repository to open.
 // The badge images are PyPad's own (stable addresses, not tied to a release): a dark pill that reads on both GitHub themes,
 // and a light-pill variant for the dark-theme <source>.
 const PYPAD_BADGE = 'https://pypad.dev/badge.svg';
 const PYPAD_BADGE_DARK = 'https://pypad.dev/badge-dark.svg';
-const PYPAD_BASE = 'https://pypad.dev/v0.4.0-rc.6/'; // the release to open (moves to /v1/ once 0.4.0 is released)
+// The job may only choose which PyPad release line to open: /v0/ (every newer release), /v0.4/ (that minor's fixes) or /v0.4.0/ (one release).
+// Candidates (/v0.4.0-rc.6/) are refused: their address disappears when the next candidate is published.
+const PYPAD_VERSION_RE = /^v\d{1,3}(?:\.\d{1,3}){0,2}$/;
+const PYPAD_DEFAULT_VERSION = 'v0'; // a job from a server that sends no version
+// An earlier bot wrote badges that open a release candidate, which no longer exists. Those are repaired; any other PyPad link is left as it is.
+const PYPAD_CANDIDATE_LINK_RE = /https:\/\/pypad\.dev\/v\d+\.\d+\.\d+-rc\.\d+\/(?=#gh=)/g;
 // Where the roster repository comes from when the educator has none yet. Fixed here, never taken from a job.
 const TRACKING_TEMPLATE = { owner: 'class-repo', repo: 'class-repo-tracking-template' };
 const SUPPORTED_SNAPSHOT_FIELDS = ['protocol', 'mode', 'template', 'assignment_name', 'target_owner', 'shortcode'];
@@ -138,7 +143,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
       if (people.some(p => !p || typeof p.sealed !== 'string' || !ALLOWED_PERMISSIONS.includes(p.permission))) {
         return { message: `The job asks for a permission this bot never grants (it grants only: ${ALLOWED_PERMISSIONS.join(', ')}).`, student: 'This could not be done.' };
       }
-      const settingsOk = Object.entries(spec.settings || {}).every(([k, v]) => (k === 'instructions_url' ? typeof v === 'string' && INSTRUCTIONS_RE.test(v) : k === 'pypad_file' ? typeof v === 'string' && v.length <= 120 && PYPAD_FILE_RE.test(v) && !v.split('/').some(part => part === '.' || part === '..') : typeof v === 'boolean'));
+      const settingsOk = Object.entries(spec.settings || {}).every(([k, v]) => (k === 'instructions_url' ? typeof v === 'string' && INSTRUCTIONS_RE.test(v) : k === 'pypad_file' ? typeof v === 'string' && v.length <= 120 && PYPAD_FILE_RE.test(v) && !v.split('/').some(part => part === '.' || part === '..') : k === 'pypad_version' ? typeof v === 'string' && PYPAD_VERSION_RE.test(v) : typeof v === 'boolean'));
       if (!settingsOk) return { message: 'A repository setting has an invalid value.', student: 'This could not be done.' };
     }
     return null;
@@ -470,7 +475,7 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
         }
       }
       if (settings.actions_enabled !== undefined) await setActions(repoName, settings.actions_enabled); // best effort
-      await addReadmeNotes(repoName, { instructionsUrl: settings.instructions_url, badge: settings.codespaces_badge === true, pypad: settings.pypad_badge === true, pypadFile: settings.pypad_file }); // best effort
+      await addReadmeNotes(repoName, { instructionsUrl: settings.instructions_url, badge: settings.codespaces_badge === true, pypad: settings.pypad_badge === true, pypadFile: settings.pypad_file, pypadVersion: settings.pypad_version }); // best effort
       writeRoster(people, repoName);
       if (settings.archived === true) {
         try { await github.rest.repos.update({ owner, repo: repoName, archived: true }); } catch (e) { throw new Error(`Could not archive the repository (HTTP ${e.status || 'error'}).`); }
@@ -496,21 +501,23 @@ async function run({ github, context, core, env = process.env, deps = {} }) {
     }
 
     // Puts the instructions link and the Codespaces and PyPad badges at the top of the README, once each (so re-running is harmless).
-    async function addReadmeNotes(repoName, { instructionsUrl, badge, pypad, pypadFile }) {
+    async function addReadmeNotes(repoName, { instructionsUrl, badge, pypad, pypadFile, pypadVersion }) {
+      const pypadBase = `https://pypad.dev/${pypadVersion || PYPAD_DEFAULT_VERSION}/`;
       const notes = [];
       if (instructionsUrl) notes.push({ key: instructionsUrl, text: `**[Assignment instructions](${instructionsUrl})**` });
       if (badge) notes.push({ key: 'codespaces.new', text: `[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/${owner}/${repoName}?quickstart=1)` });
       if (pypad) {
-        const target = `${PYPAD_BASE}#gh=${owner}/${repoName}${pypadFile ? `/${pypadFile}` : ''}`;
+        const target = `${pypadBase}#gh=${owner}/${repoName}${pypadFile ? `/${pypadFile}` : ''}`;
         notes.push({ key: 'pypad.dev/', text: `<a href="${target}"><picture><source media="(prefers-color-scheme: dark)" srcset="${PYPAD_BADGE_DARK}"><img src="${PYPAD_BADGE}" alt="Open in PyPad"></picture></a>\n\n**Open in PyPad** runs the notebook in your browser and saves your work back to this repository. The first time, click *Sign in with GitHub* and approve *PyPad for GitHub*. Nothing to install.` });
       }
       if (notes.length === 0) return;
       try {
         const readme = await github.rest.repos.getContent({ owner, repo: repoName, path: 'README.md' }).catch(() => null);
         const current = readme && readme.data ? Buffer.from(readme.data.content, 'base64').toString('utf8') : '';
-        const missing = notes.filter(n => !current.includes(n.key));
-        if (missing.length === 0) return;
-        const content = Buffer.from(`${missing.map(n => n.text).join('\n\n')}\n\n${current}`.trimEnd() + '\n').toString('base64');
+        const repaired = pypad ? current.replace(PYPAD_CANDIDATE_LINK_RE, pypadBase) : current;
+        const missing = notes.filter(n => !repaired.includes(n.key));
+        if (missing.length === 0 && repaired === current) return;
+        const content = Buffer.from([...missing.map(n => n.text), repaired].filter(Boolean).join('\n\n').trimEnd() + '\n').toString('base64');
         await github.rest.repos.createOrUpdateFileContents({ owner, repo: repoName, path: 'README.md', message: 'Add assignment links', content, ...(readme && readme.data ? { sha: readme.data.sha } : {}) });
       } catch {
         core.warning('Could not add the assignment links to one repository.');

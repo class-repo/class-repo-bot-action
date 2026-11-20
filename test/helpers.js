@@ -29,7 +29,7 @@ const strict = (name, target) => new Proxy(target, {
   get(t, prop) { if (!(prop in t)) throw new Error(`UNEXPECTED GITHUB CALL: ${name}.${String(prop)}`); return t[prop]; },
 });
 
-function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, rosterKeyStatus = 200, execFile, existing = {} } = {}) {
+function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, rosterKeyStatus = 200, execFile, existing = {}, readmeSeed = {} } = {}) {
   const logs = [];
   const record = (level) => (msg) => logs.push(`${level}: ${msg}`);
   const secrets = [];
@@ -80,7 +80,9 @@ function setup({ job, privateKeyPem, githubOverrides = {}, serverStatus = 200, r
         if (githubOverrides.update) await githubOverrides.update(a);
         repos.get(a.repo).archived = a.archived;
       },
-      getContent: async ({ path: filePath }) => {
+      getContent: async ({ repo, path: filePath }) => {
+        // `readmeSeed` gives a repository a README that is already there (for example one an older bot wrote).
+        if (filePath === 'README.md' && readmeSeed[repo] !== undefined) return { data: { content: Buffer.from(readmeSeed[repo]).toString('base64'), sha: 'seed' } };
         if (filePath !== '') throw notFound();
         // The root listing is how the bot knows GitHub has finished copying a template. `copyPending` = how many looks come back empty.
         looks.push(calls.length); // how many writes had happened when the bot looked

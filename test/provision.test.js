@@ -229,6 +229,49 @@ test('the PyPad badge sits beside the Codespaces one, under the instructions lin
   assert.ok(readme.indexOf('Assignment instructions') < readme.indexOf('Open in GitHub Codespaces') && readme.indexOf('Open in GitHub Codespaces') < readme.indexOf('Open in PyPad'), readme);
 });
 
+test('opens the PyPad version the job names, and v0 when it names none', async () => {
+  const pair = generateRosterKeyPair();
+  for (const [version, base] of [['v0.4', 'https://pypad.dev/v0.4/'], ['v0.4.0', 'https://pypad.dev/v0.4.0/'], ['v1', 'https://pypad.dev/v1/'], [undefined, 'https://pypad.dev/v0/']]) {
+    const t = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true, pypad_file: 'week1.ipynb', ...(version ? { pypad_version: version } : {}) } }), privateKeyPem: pair.privateKeyPem });
+    await exercise(t);
+    assert.ok(t.readmes['lab1-alice-gh'].startsWith(`<a href="${base}#gh=cs101-org/lab1-alice-gh/week1.ipynb">`), t.readmes['lab1-alice-gh']);
+  }
+});
+
+test('says it understands the PyPad version, so the server only sends it to a bot that does', async () => {
+  const pair = generateRosterKeyPair();
+  const t = setup({ job: baseJob(pair), privateKeyPem: pair.privateKeyPem });
+  await exercise(t);
+  assert.ok(t.requests.find(r => r.url.endsWith('/claim')).body.bot.capabilities.includes('setting:pypad_version'));
+});
+
+test('a PyPad version that is a candidate, or could change the address, refuses the whole job before anything is done', async () => {
+  const pair = generateRosterKeyPair();
+  for (const bad of ['v0.4.0-rc.6', '0.4', 'v', 'v0.4.0.1', 'v0/../x', 'v0/#gh=evil/x', 'latest', 'https://evil.example/', 4, '', `v${'1'.repeat(10)}`]) {
+    const t = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true, pypad_version: bad } }), privateKeyPem: pair.privateKeyPem });
+    await exercise(t);
+    assert.deepEqual(t.calls, [], String(bad));
+  }
+});
+
+test('repairs a PyPad badge an older bot pointed at a release candidate, without adding a second one', async () => {
+  const pair = generateRosterKeyPair();
+  const old = '<a href="https://pypad.dev/v0.4.0-rc.6/#gh=cs101-org/lab1-alice-gh/week1.ipynb"><picture><img src="https://pypad.dev/badge.svg" alt="Open in PyPad"></picture></a>\n\n# Lab 1\n';
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true, pypad_file: 'week1.ipynb', pypad_version: 'v0.4' } }), privateKeyPem: pair.privateKeyPem,
+    existing: { 'lab1-alice-gh': { private: true, topics: ['classrepo'] } }, readmeSeed: { 'lab1-alice-gh': old } });
+  await exercise(t);
+  assert.equal(t.readmes['lab1-alice-gh'], old.replace('v0.4.0-rc.6', 'v0.4'));
+});
+
+test('leaves a PyPad badge that opens a real release as it is (a course is not moved mid-term)', async () => {
+  const pair = generateRosterKeyPair();
+  const current = '<a href="https://pypad.dev/v0.4/#gh=cs101-org/lab1-alice-gh"><img src="https://pypad.dev/badge.svg" alt="Open in PyPad"></a>\n';
+  const t = setup({ job: oneRepo(pair, ALICE, { settings: { pypad_badge: true, pypad_version: 'v0.5' } }), privateKeyPem: pair.privateKeyPem,
+    existing: { 'lab1-alice-gh': { private: true, topics: ['classrepo'] } }, readmeSeed: { 'lab1-alice-gh': current } });
+  await exercise(t);
+  assert.equal(t.readmes['lab1-alice-gh'], undefined); // nothing written
+});
+
 test('a notebook path that could change the address refuses the whole job before anything is done', async () => {
   const pair = generateRosterKeyPair();
   for (const bad of ['../secret', '/etc/passwd', 'a/../b', 'a b.ipynb', 'x.ipynb?y=1', 'x.ipynb#z', 'a//b', 'https://evil.example/', 42, `${'a'.repeat(130)}.ipynb`]) {
